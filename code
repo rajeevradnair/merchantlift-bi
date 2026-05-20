@@ -1,0 +1,42 @@
+# Merchant Offer Economics
+
+## Purpose
+
+This document defines the core business formulas used by MerchantLift BI.
+
+MerchantLift BI exists to answer one central question:
+
+> Did the merchant offer create incremental profitable spend, or did it simply subsidize customers who would have purchased anyway?
+
+To answer this, the platform must calculate merchant economics from first principles.
+
+---
+
+## 1. Why Merchant Economics Matter
+
+A merchant-funded offer may look successful if total spend and redemptions increase.
+
+However, high redemptions do not automatically mean the campaign created value.
+
+A campaign can fail economically if:
+
+- customers would have purchased anyway
+- reward cost is too high
+- merchant margin is too low
+- platform fees are too high
+- refund-after-reward behavior occurs
+- fraud or offer abuse increases
+- settlement records do not reconcile
+
+MerchantLift BI therefore measures not just spend, but profitable incremental value.
+
+---
+
+## 2. Core Business Definitions
+
+### Gross Spend
+
+Gross spend is the total transaction amount.
+
+```text
+Gross spend = sum(transaction_amount)
