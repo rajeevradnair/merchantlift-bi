@@ -65,3 +65,12 @@ Governed reporting marts
 Power BI
     ↓
 Executive, merchant, finance, risk, and compliance dashboards
+
+MerchantLift BI models the full lifecycle of a merchant-funded card-linked offer:
+```
+
+## Core Merchant Offer Lifecycle
+
+```text
+campaign → offer → impression → activation → transaction → redemption → reward liability → settlement → fraud checks → reconciliation → privacy-safe reporting
+```
