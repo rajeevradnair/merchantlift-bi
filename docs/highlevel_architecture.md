@@ -1,4 +1,6 @@
-MerchantLift BI — Full Production-Grade Architecture
+## MerchantLift BI — Full Production-Grade Architecture
+
+```text
 
 Business Domain Layer
 Merchant-funded offers
