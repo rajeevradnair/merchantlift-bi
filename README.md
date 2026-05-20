@@ -74,3 +74,20 @@ MerchantLift BI models the full lifecycle of a merchant-funded card-linked offer
 ```text
 campaign → offer → impression → activation → transaction → redemption → reward liability → settlement → fraud checks → reconciliation → privacy-safe reporting
 ```
+
+## Stakeholder Use Cases
+
+MerchantLift BI is designed for multiple stakeholder groups:
+
+- Executives monitoring profitable incremental growth
+- Merchant teams optimizing campaigns and offers
+- Finance teams validating reward liability and settlement reconciliation
+- Risk teams detecting fraud and offer abuse
+- Compliance teams enforcing privacy-safe reporting
+- Data engineering teams maintaining reliable pipelines
+- Analytics engineering teams building trusted marts and dashboards
+
+The stakeholder map is documented in:
+
+```text
+docs/stakeholder_use_cases.md
