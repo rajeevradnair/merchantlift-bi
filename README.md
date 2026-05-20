@@ -91,3 +91,16 @@ The stakeholder map is documented in:
 
 ```text
 docs/stakeholder_use_cases.md
+
+## Incrementality Problem
+
+MerchantLift BI does not treat redemptions as automatic proof of campaign success.
+
+A redemption proves that a customer qualified for an offer, but it does not prove that the offer caused the purchase.
+
+The incrementality design explains why simple before/after analysis is weak and why matched test/control groups are needed.
+
+The incrementality problem framing is documented in:
+
+```text
+docs/incrementality_problem.md
