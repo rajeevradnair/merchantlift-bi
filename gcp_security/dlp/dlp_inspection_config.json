@@ -1,0 +1,31 @@
+{
+  "display_name": "merchantlift-synthetic-data-dlp-inspection",
+  "description": "DLP inspection configuration for MerchantLift BI synthetic merchant-offer data. The goal is to detect accidental raw PAN or real PII patterns before data is promoted into analytics layers.",
+  "inspect_config": {
+    "info_types": [
+      {
+        "name": "CREDIT_CARD_NUMBER"
+      },
+      {
+        "name": "EMAIL_ADDRESS"
+      },
+      {
+        "name": "PHONE_NUMBER"
+      },
+      {
+        "name": "PERSON_NAME"
+      },
+      {
+        "name": "STREET_ADDRESS"
+      }
+    ],
+    "min_likelihood": "POSSIBLE",
+    "include_quote": true
+  },
+  "expected_result": {
+    "raw_pan_allowed": false,
+    "real_pii_allowed": false,
+    "tokenized_cardmember_id_allowed": true,
+    "synthetic_merchant_names_allowed": true
+  }
+}

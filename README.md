@@ -104,3 +104,27 @@ The incrementality problem framing is documented in:
 
 ```text
 docs/incrementality_problem.md
+
+## Privacy and Compliance Design
+
+MerchantLift BI is synthetic, but it is designed with financial-services-grade privacy principles.
+
+The platform uses:
+
+- no raw PAN/card-number policy
+- synthetic data only
+- tokenized cardmember identifiers
+- least-privilege access design
+- aggregated reporting
+- cohort suppression
+- BigQuery policy tag design
+- BigQuery row-level security design
+- Google Cloud DLP inspection configuration
+- Cloud KMS design notes
+- IAM service account separation
+- Cloud Audit Logs design
+
+The privacy and compliance design is documented in:
+
+```text
+docs/privacy_compliance_design.md
