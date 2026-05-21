@@ -42,29 +42,40 @@ The platform is designed to process 100M+ synthetic events across (local impleme
 ## High-Level Architecture
 
 ```text
+Business domain rules
+        ↓
+Synthetic data generator
 Python + Faker + Polars
         ↓
-Synthetic merchant / offer / transaction events
-    ↓
-Parquet files
-    ↓
+Partitioned Parquet files
+        ↓
 Raw data lake
-    ↓
+        ↓
+Great Expectations raw validation
+        ↓
 Spark / Databricks
-    ↓
-Bronze / Silver / Gold Delta Lake tables
-    ↓
-dbt
-    ↓
-Business metric models
-    ↓
-BigQuery
-    ↓
-Governed reporting marts
-    ↓
-Power BI
-    ↓
-Executive, merchant, finance, risk, and compliance dashboards
+        ↓
+Bronze Delta tables
+        ↓
+Silver Delta tables
+        ↓
+Gold Delta tables
+        ↓
+BigQuery staging
+        ↓
+dbt staging models
+        ↓
+dbt intermediate models
+        ↓
+dbt marts
+        ↓
+BigQuery governed reporting datasets
+        ↓
+Policy tags / row-level security / DLP / KMS / audit logs
+        ↓
+Power BI dashboards
+        ↓
+Executive, merchant, finance, risk, compliance insights
 
 MerchantLift BI models the full lifecycle of a merchant-funded card-linked offer:
 ```
@@ -128,3 +139,19 @@ The privacy and compliance design is documented in:
 
 ```text
 docs/privacy_compliance_design.md
+
+The architecture is documented in:
+
+```text
+docs/incrementality_problem.md
+
+The reusable data contract template is documented in:
+
+```text
+docs/incrementality_problem.md
+
+The initial ERD is documented in:
+
+```text
+docs/initial_erd.md
+docs/initial_erd.png
