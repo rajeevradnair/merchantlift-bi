@@ -1,0 +1,38 @@
+project:
+  name: merchantlift-bi
+  default_environment: local
+
+data_volume_targets:
+  fact_transactions: 6000000
+  fact_offer_impressions: 1500000
+  fact_offer_activations: 1000000
+  fact_offer_redemptions: 500000
+  fact_control_group_transactions: 750000
+  fact_reward_liability: 250000
+  fact_merchant_settlements: 200000
+  fact_fraud_risk_events: 100000
+  fact_data_quality_reconciliation: 50000
+
+privacy:
+  minimum_reportable_cohort_size: 50
+  allow_raw_pan: false
+  allow_real_pii: false
+  tokenized_identifier_column: tokenized_cardmember_id
+
+economics:
+  default_platform_fee_rate: 0.02
+  default_reward_multiplier: 0.10
+  cannibalization_net_profit_threshold: 0
+
+lakehouse:
+  raw_zone: data/raw
+  bronze_zone: data/bronze
+  silver_zone: data/silver
+  gold_zone: data/gold
+
+warehouse:
+  staging_dataset: merchantlift_staging
+  intermediate_dataset: merchantlift_intermediate
+  marts_dataset: merchantlift_marts
+  privacy_safe_dataset: merchantlift_privacy_safe
+  audit_dataset: merchantlift_audit

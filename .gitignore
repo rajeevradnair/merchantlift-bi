@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Testing / tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local data outputs
+data/raw/**
+data/bronze/**
+data/silver/**
+data/gold/**
+data/samples/**
+misc/
+
+# Keep data folders but ignore generated files
+!data/raw/.gitkeep
+!data/bronze/.gitkeep
+!data/silver/.gitkeep
+!data/gold/.gitkeep
+!data/samples/.gitkeep
+
+# Logs and reports generated during runs
+logs/
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Power BI local artifacts
+*.pbix
+*.pbit
