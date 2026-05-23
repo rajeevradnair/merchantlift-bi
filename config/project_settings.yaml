@@ -129,3 +129,43 @@ facts:
     - mismatched
     - late_arriving
     - refund_after_reward
+
+synthetic_generation:
+  random_seed: 42
+
+  local_sample_scale:
+    fact_transactions: 10000
+    fact_offer_impressions: 3000
+    fact_offer_activations: 2000
+    fact_offer_redemptions: 1000
+    fact_control_group_transactions: 1500
+    fact_reward_liability: 1000
+    fact_merchant_settlements: 1000
+    fact_fraud_risk_events: 200
+    fact_data_quality_reconciliation: 200
+
+  behavior_mix:
+    incremental_shopper: 0.25
+    subsidized_shopper: 0.25
+    lapsed_reactivated: 0.15
+    loyal_existing: 0.20
+    bargain_seeker: 0.10
+    fraud_prone: 0.05
+
+  funnel_rates:
+    impression_to_activation_rate: 0.20
+    activation_to_transaction_rate: 0.50
+    transaction_to_redemption_rate: 0.50
+
+  fraud_rates:
+    duplicate_redemption: 0.003
+    refund_after_reward: 0.010
+    high_redemption_velocity: 0.005
+    merchant_location_anomaly: 0.002
+    reward_gaming_pattern: 0.004
+
+  reconciliation_status_mix:
+    matched: 0.95
+    mismatched: 0.02
+    late_arriving: 0.02
+    refund_after_reward: 0.01

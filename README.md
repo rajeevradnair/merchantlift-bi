@@ -210,3 +210,29 @@ Fact table design and contracts are documented in:
 ```text
 docs/fact_table_design.md
 docs/fact_contracts.md
+```
+
+## Synthetic Data Design
+
+MerchantLift BI uses synthetic data that is fake but behaviorally realistic.
+
+The synthetic data design includes:
+
+- 10M+ full-scale target rows
+- smaller local sample generation
+- merchant category behavior
+- customer segments
+- shopper behavior types
+- test/control design
+- subsidized shopper simulation
+- reward rules
+- fraud and offer-abuse patterns
+- reconciliation mismatches
+- privacy-safe cohort behavior
+
+Synthetic data design is documented in:
+
+```text
+docs/synthetic_data_design.md
+docs/synthetic_generation_rules.md
+```
