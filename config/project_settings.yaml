@@ -36,3 +36,96 @@ warehouse:
   marts_dataset: merchantlift_marts
   privacy_safe_dataset: merchantlift_privacy_safe
   audit_dataset: merchantlift_audit
+
+dimensions:
+  merchant_status_values:
+    - active
+    - inactive
+    - suspended
+
+  offer_type_values:
+    - fixed_cashback
+    - percent_cashback
+
+  offer_status_values:
+    - draft
+    - active
+    - expired
+    - cancelled
+
+  campaign_objective_values:
+    - acquisition
+    - reactivation
+    - repeat_purchase
+    - basket_size_growth
+    - category_share
+
+  campaign_status_values:
+    - draft
+    - active
+    - paused
+    - completed
+    - cancelled
+
+  consent_status_values:
+    - granted
+    - revoked
+    - unknown
+
+  risk_category_values:
+    - duplicate
+    - refund
+    - velocity
+    - location
+    - reward_gaming
+
+  risk_severity_values:
+    - low
+    - medium
+    - high
+    - critical
+
+facts:
+  transaction_status_values:
+    - authorized
+    - settled
+    - refunded
+    - reversed
+
+  impression_channel_values:
+    - app
+    - email
+    - web
+
+  activation_status_values:
+    - active
+    - expired
+    - cancelled
+
+  redemption_status_values:
+    - qualified
+    - reversed
+    - refunded
+
+  liability_status_values:
+    - accrued
+    - paid
+    - reversed
+
+  settlement_status_values:
+    - pending
+    - settled
+    - failed
+    - reversed
+
+  risk_event_status_values:
+    - open
+    - reviewed
+    - confirmed_false_positive
+    - confirmed_abuse
+
+  reconciliation_status_values:
+    - matched
+    - mismatched
+    - late_arriving
+    - refund_after_reward

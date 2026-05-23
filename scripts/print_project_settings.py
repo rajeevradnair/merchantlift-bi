@@ -12,6 +12,8 @@ def main() -> None:
     config_path = CONFIG_DIR / "project_settings.yaml"
     settings = load_yaml_config(config_path)
 
+    print(settings)
+
     project_name = settings["project"]["name"]
     minimum_cohort_size = settings["privacy"]["minimum_reportable_cohort_size"]
     raw_zone = settings["lakehouse"]["raw_zone"]

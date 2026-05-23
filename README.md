@@ -102,6 +102,7 @@ The stakeholder map is documented in:
 
 ```text
 docs/stakeholder_use_cases.md
+```
 
 ## Incrementality Problem
 
@@ -115,6 +116,7 @@ The incrementality problem framing is documented in:
 
 ```text
 docs/incrementality_problem.md
+```
 
 ## Privacy and Compliance Design
 
@@ -139,19 +141,72 @@ The privacy and compliance design is documented in:
 
 ```text
 docs/privacy_compliance_design.md
+```
 
 The architecture is documented in:
 
 ```text
 docs/incrementality_problem.md
+```
 
 The reusable data contract template is documented in:
 
 ```text
 docs/incrementality_problem.md
+```
 
 The initial ERD is documented in:
 
 ```text
 docs/initial_erd.md
 docs/initial_erd.png
+```
+
+## Dimension Design
+
+MerchantLift BI uses dimension tables to describe the business context around fact events.
+
+Core dimensions include:
+
+- `dim_cardmember_token`
+- `dim_merchant`
+- `dim_merchant_scd`
+- `dim_offer`
+- `dim_offer_scd`
+- `dim_campaign`
+- `dim_campaign_scd`
+- `dim_location`
+- `dim_category`
+- `dim_segment`
+- `dim_date`
+- `dim_privacy_consent`
+- `dim_risk_rule`
+
+Dimension design and contracts are documented in:
+
+```text
+docs/dimension_design.md
+docs/dimension_contracts.md
+```
+
+## Fact Design
+
+MerchantLift BI uses fact tables to record business events and measurable activity.
+
+Core fact tables include:
+
+- `fact_transactions`
+- `fact_offer_impressions`
+- `fact_offer_activations`
+- `fact_offer_redemptions`
+- `fact_control_group_transactions`
+- `fact_reward_liability`
+- `fact_merchant_settlements`
+- `fact_fraud_risk_events`
+- `fact_data_quality_reconciliation`
+
+Fact table design and contracts are documented in:
+
+```text
+docs/fact_table_design.md
+docs/fact_contracts.md
