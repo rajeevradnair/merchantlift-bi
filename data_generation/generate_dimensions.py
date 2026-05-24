@@ -4,7 +4,7 @@ from datetime import datetime, date, timedelta
 import polars as pl
 import random
 from faker import Faker
-from merchantlift.paths import CONFIG_DIR, DATA_DIR
+from merchantlift.paths import CONFIG_DIR, DATA_DIR, RAW_DATA_DIR
 from merchantlift.config import load_yaml_config
 
 DEFAULT_DIMENSION_COUNTS = {
@@ -22,7 +22,7 @@ def make_id(prefix: str, number: int, width: int = 6) -> str:
     return f"{prefix}_{number:0{width}d}"
     
 def write_parquet_table(df:pl.DataFrame, table_name: str) -> None:
-    output_dir_path:Path = DATA_DIR / table_name
+    output_dir_path:Path = RAW_DATA_DIR / table_name
     output_dir_path.mkdir(parents=True, exist_ok=True)
     output_file_path = output_dir_path / "part-00000.parquet"
     df.write_parquet(output_file_path)
@@ -286,11 +286,7 @@ def generate_dim_cardmember_token(
     config: dict[str, Any],
     num_cardmembers: int,
 ) -> pl.DataFrame:
-    """Generate tokenized cardmember dimension.
 
-    This table creates synthetic users with history, affinity,
-    and shopper behavior labels for incrementality simulation.
-    """
     segment_ids = dim_segment["segment_id"].to_list()
     location_ids = dim_location["location_id"].to_list()
 

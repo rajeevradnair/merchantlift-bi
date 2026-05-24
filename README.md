@@ -259,3 +259,26 @@ Run the generator:
 ```bash
 python3 data_generation/generate_dimensions.py
 ```
+
+## Transaction Event Generation
+
+MerchantLift BI generates synthetic card-linked transaction events after core dimensions are created.
+
+`fact_transactions` represents one synthetic card-linked purchase by one tokenized cardmember at one merchant at one timestamp.
+
+The transaction generator uses:
+
+- `dim_cardmember_token`
+- `dim_merchant`
+- `dim_category`
+- category-level basket ranges
+- simple seasonality rules
+- transaction status distributions
+- shopper behavior labels
+- early test/control markers
+
+Run the generator:
+
+```bash
+PYTHONPATH=src python data_generation/generate_transactions.py
+```
