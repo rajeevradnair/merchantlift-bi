@@ -1,6 +1,8 @@
 project:
   name: merchantlift-bi
+  description: Privacy-safe merchant offer economics and incrementality intelligence platform
   default_environment: local
+  version: 0.1.0
 
 data_volume_targets:
   fact_transactions: 6000000
@@ -18,17 +20,29 @@ privacy:
   allow_raw_pan: false
   allow_real_pii: false
   tokenized_identifier_column: tokenized_cardmember_id
+  prohibited_fields:
+    - card_number
+    - pan
+    - primary_account_number
+    - full_card_number
+    - account_number
+    - email
+    - phone_number
+    - real_name
+    - street_address
 
 economics:
   default_platform_fee_rate: 0.02
   default_reward_multiplier: 0.10
   cannibalization_net_profit_threshold: 0
+  low_lift_per_user_threshold: 5.00
 
 lakehouse:
   raw_zone: data/raw
   bronze_zone: data/bronze
   silver_zone: data/silver
   gold_zone: data/gold
+  samples_zone: data/samples
 
 warehouse:
   staging_dataset: merchantlift_staging
@@ -144,6 +158,68 @@ synthetic_generation:
     fact_fraud_risk_events: 200
     fact_data_quality_reconciliation: 200
 
+  category_rules:
+    dining:
+      basket_min: 20
+      basket_max: 150
+      default_margin_rate: 0.35
+      seasonality: weekend_lift
+
+    grocery:
+      basket_min: 25
+      basket_max: 250
+      default_margin_rate: 0.15
+      seasonality: weekly_repeat
+
+    retail:
+      basket_min: 40
+      basket_max: 600
+      default_margin_rate: 0.45
+      seasonality: holiday_lift
+
+    travel:
+      basket_min: 300
+      basket_max: 2500
+      default_margin_rate: 0.30
+      seasonality: seasonal_spikes
+
+    luxury:
+      basket_min: 200
+      basket_max: 5000
+      default_margin_rate: 0.55
+      seasonality: sparse_high_value
+
+    digital_goods:
+      basket_min: 10
+      basket_max: 300
+      default_margin_rate: 0.70
+      seasonality: frequent_online
+
+  segment_rules:
+    new_to_merchant:
+      response_rate: 0.10
+      incrementality_rate: 0.45
+
+    lapsed_customer:
+      response_rate: 0.18
+      incrementality_rate: 0.55
+
+    loyal_customer:
+      response_rate: 0.25
+      incrementality_rate: 0.15
+
+    high_value_customer:
+      response_rate: 0.20
+      incrementality_rate: 0.35
+
+    bargain_seeker:
+      response_rate: 0.35
+      incrementality_rate: 0.25
+
+    category_enthusiast:
+      response_rate: 0.22
+      incrementality_rate: 0.30
+
   behavior_mix:
     incremental_shopper: 0.25
     subsidized_shopper: 0.25
@@ -169,3 +245,64 @@ synthetic_generation:
     mismatched: 0.02
     late_arriving: 0.02
     refund_after_reward: 0.01
+
+incrementality_simulation:
+  test_control:
+    match_score_threshold: 0.75
+    control_to_test_ratio: 1.0
+    campaign_window_days: 30
+    pre_campaign_history_days: 90
+
+    matching_features:
+      - historical_spend_90d
+      - historical_transaction_count_90d
+      - merchant_affinity_score
+      - category_affinity_score
+      - segment_id
+      - location_id
+      - customer_tenure_months
+      - average_ticket_size
+
+  shopper_behavior_effects:
+    incremental_shopper:
+      expected_lift_multiplier: 1.35
+      cannibalization_risk: low
+
+    subsidized_shopper:
+      expected_lift_multiplier: 1.00
+      cannibalization_risk: high
+
+    lapsed_reactivated:
+      expected_lift_multiplier: 1.50
+      cannibalization_risk: low
+
+    loyal_existing:
+      expected_lift_multiplier: 1.05
+      cannibalization_risk: medium
+
+    bargain_seeker:
+      expected_lift_multiplier: 1.15
+      cannibalization_risk: medium
+
+    fraud_prone:
+      expected_lift_multiplier: 1.20
+      cannibalization_risk: high
+
+  cannibalization_rules:
+    low_lift_per_user_threshold: 5.00
+    high_reward_to_lift_ratio_threshold: 1.00
+    negative_profit_is_high_risk: true
+
+output:
+  write_format: parquet
+  raw_output_root: data/raw
+  partition_strategy:
+    fact_transactions: transaction_date
+    fact_offer_impressions: impression_date
+    fact_offer_activations: activation_date
+    fact_offer_redemptions: redemption_date
+    fact_control_group_transactions: transaction_date
+    fact_reward_liability: liability_date
+    fact_merchant_settlements: settlement_date
+    fact_fraud_risk_events: event_date
+    fact_data_quality_reconciliation: reconciliation_date

@@ -236,3 +236,26 @@ Synthetic data design is documented in:
 docs/synthetic_data_design.md
 docs/synthetic_generation_rules.md
 ```
+
+## Core Dimension Generation
+
+MerchantLift BI generates core dimension tables before fact events.
+
+Generated dimensions:
+
+- `dim_category`
+- `dim_location`
+- `dim_segment`
+- `dim_risk_rule`
+- `dim_merchant`
+- `dim_campaign`
+- `dim_offer`
+- `dim_cardmember_token`
+- `dim_privacy_consent`
+- `dim_date`
+
+Run the generator:
+
+```bash
+python3 data_generation/generate_dimensions.py
+```
