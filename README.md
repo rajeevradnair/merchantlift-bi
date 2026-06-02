@@ -282,3 +282,27 @@ Run the generator:
 ```bash
 PYTHONPATH=src python data_generation/generate_transactions.py
 ```
+
+## Offer Interaction Generation
+
+MerchantLift BI generates the offer interaction funnel after dimensions and transactions are created.
+
+Generated tables:
+
+- `fact_offer_customer_assignment`
+- `fact_offer_impressions`
+- `fact_offer_activations`
+
+The funnel is:
+
+```text
+assignment / eligibility
+-> impression / exposure
+-> activation / intent
+```
+
+Run the generator:
+
+```bash
+PYTHONPATH=src python data_generation/generate_transactions.py
+```

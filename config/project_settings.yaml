@@ -6,6 +6,7 @@ project:
 
 data_volume_targets:
   fact_transactions: 6000000
+  fact_offer_customer_assignment: 2000000
   fact_offer_impressions: 1500000
   fact_offer_activations: 1000000
   fact_offer_redemptions: 500000
@@ -149,6 +150,7 @@ synthetic_generation:
 
   local_sample_scale:
     fact_transactions: 10000
+    fact_offer_customer_assignment: 5000
     fact_offer_impressions: 3000
     fact_offer_activations: 2000
     fact_offer_redemptions: 1000
@@ -245,6 +247,31 @@ synthetic_generation:
     mismatched: 0.02
     late_arriving: 0.02
     refund_after_reward: 0.01
+
+offer_interactions:
+  assignment_group_mix:
+    test: 0.70
+    control: 0.20
+    holdout: 0.10
+
+  impression_channel_mix:
+    app: 0.60
+    email: 0.30
+    web: 0.10
+
+  click_rate_by_channel:
+    app: 0.18
+    email: 0.10
+    web: 0.08
+
+  activation_rate_by_segment:
+    new_to_merchant: 0.16
+    lapsed_customer: 0.22
+    loyal_customer: 0.26
+    high_value_customer: 0.24
+    bargain_seeker: 0.32
+    category_enthusiast: 0.25
+
 
 incrementality_simulation:
   test_control:
