@@ -28,14 +28,14 @@ def read_raw_table(table_name: str) -> pl.DataFrame:
 
     return pl.read_parquet(parquet_path)
 
-def load_transaction_inputs() -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+def load_dimensions() -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     dim_cardmember_token = read_raw_table("dim_cardmember_token")
     dim_merchant = read_raw_table("dim_merchant")
     dim_category = read_raw_table("dim_category")
 
     return dim_cardmember_token, dim_merchant, dim_category
 
-def build_merchant_lookup(
+def build_merchant_category_lookup(
     dim_merchant: pl.DataFrame,
     dim_category: pl.DataFrame,
 ) -> list[dict[str, Any]]:
@@ -43,11 +43,12 @@ def build_merchant_lookup(
         dim_category,
         on="category_id",
         how="left",
+        coalesce=True
     )
     return merchant_with_category.to_dicts()
 
 
-def generate_transaction_amount(merchant: dict[str, Any]) -> float:
+def generate_transaction_amount(merchants_categories: dict[str, Any]) -> float:
     """Generate a transaction amount based on merchant category basket range.
 
     The merchant row already includes category behavior because we joined
@@ -62,8 +63,8 @@ def generate_transaction_amount(merchant: dict[str, Any]) -> float:
     Returns:
         A positive transaction amount rounded to 2 decimals.
     """
-    basket_min = float(merchant["basket_min"])
-    basket_max = float(merchant["basket_max"])
+    basket_min = float(merchants_categories["basket_min"])
+    basket_max = float(merchants_categories["basket_max"])
 
     typical_amount = basket_min + ((basket_max - basket_min) * 0.35)
 
@@ -98,20 +99,20 @@ def generate_transaction_timestamp() -> datetime:
 
 def apply_simple_seasonality(
     amount: float,
-    merchant: dict[str, Any],
+    merchants_categories: dict[str, Any],
     transaction_timestamp: datetime,
 ) -> float:
     """Apply simple category-specific seasonality.
 
     Args:
         amount: Base transaction amount.
-        merchant: Enriched merchant dictionary with category_name.
+        merchants_categories: Enriched merchant-category dictionary with category_name.
         transaction_timestamp: Generated transaction timestamp.
 
     Returns:
         Seasonality-adjusted transaction amount.
     """
-    category_name = merchant["category_name"]
+    category_name = merchants_categories["category_name"]
     is_weekend = transaction_timestamp.weekday() >= 5
     month = transaction_timestamp.month
 
@@ -129,14 +130,14 @@ def apply_simple_seasonality(
     if category_name == "luxury" and month in {11, 12}:
         multiplier = 1.15
 
-    print("Base multiplier = ", multiplier)
+    #print("Base multiplier = ", multiplier)
 
     return round(amount * multiplier, 2)
 
 def generate_transaction_row(
     transaction_number: int,
     cardmember: dict[str, Any],
-    merchant: dict[str, Any],
+    merchants_categories: dict[str, Any],
     transaction_status_values: list[str],
 ) -> dict[str, Any]:
     """Generate one complete transaction event row.
@@ -152,11 +153,11 @@ def generate_transaction_row(
     """
     transaction_timestamp = generate_transaction_timestamp()
 
-    base_amount = generate_transaction_amount(merchant)
+    base_amount = generate_transaction_amount(merchants_categories)
 
     adjusted_amount = apply_simple_seasonality(
         amount=base_amount,
-        merchant=merchant,
+        merchants_categories=merchants_categories,
         transaction_timestamp=transaction_timestamp,
     )
 
@@ -169,9 +170,9 @@ def generate_transaction_row(
     return {
         "transaction_id": make_id("tx", transaction_number),
         "tokenized_cardmember_id": cardmember["tokenized_cardmember_id"],
-        "merchant_id": merchant["merchant_id"],
-        "category_id": merchant["category_id"],
-        "location_id": merchant["location_id"],
+        "merchant_id": merchants_categories["merchant_id"],
+        "category_id": merchants_categories["category_id"],
+        "location_id": merchants_categories["location_id"],
         "transaction_timestamp": transaction_timestamp,
         "transaction_date": transaction_timestamp.date(),
         "transaction_amount": adjusted_amount,
@@ -199,11 +200,11 @@ def generate_fact_transactions(
     Returns:
         A Polars DataFrame containing synthetic transaction events.
     """
-    dim_cardmember_token, dim_merchant, dim_category = load_transaction_inputs()
+    dim_cardmember_token, dim_merchant, dim_category = load_dimensions()
 
     cardmembers = dim_cardmember_token.to_dicts()
 
-    merchants = build_merchant_lookup(
+    merchants_categories = build_merchant_category_lookup(
         dim_merchant=dim_merchant,
         dim_category=dim_category,
     )
@@ -216,7 +217,7 @@ def generate_fact_transactions(
         transaction_row = generate_transaction_row(
             transaction_number=transaction_number,
             cardmember=random.choice(cardmembers),
-            merchant=random.choice(merchants),
+            merchants_categories=random.choice(merchants_categories),
             transaction_status_values=transaction_status_values,
         )
 

@@ -2,7 +2,7 @@
 
 This script proves that our config loader and path utilities work.
 """
-
+ 
 from merchantlift.config import load_yaml_config
 from merchantlift.paths import CONFIG_DIR
 
