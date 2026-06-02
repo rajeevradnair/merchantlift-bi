@@ -306,3 +306,45 @@ Run the generator:
 ```bash
 PYTHONPATH=src python data_generation/generate_transactions.py
 ```
+
+
+## Redemption and Control-Group Event Generation
+
+MerchantLift BI generates redemption and control-group events after transactions and offer interactions are created.
+
+Generated tables:
+
+```text
+fact_offer_redemptions
+fact_control_group_transactions
+```
+
+`fact_offer_redemptions` captures qualified offer-side spend.
+
+`fact_control_group_transactions` captures baseline no-offer spend from similar control users.
+
+The Day 18 generator enforces the rule:
+
+```text
+No redemption without a real transaction row.
+```
+
+If natural transaction-to-activation matches are insufficient in the local sample, the generator creates supplemental qualifying transactions and appends them to `fact_transactions` before creating redemptions.
+
+Run the generator:
+
+```bash
+PYTHONPATH=src python data_generation/generate_redemptions_and_controls.py
+```
+
+Inspect generated outputs:
+
+```bash
+PYTHONPATH=src python scripts/inspect_generated_redemptions_and_controls.py
+```
+
+Documentation:
+
+```text
+docs/redemption_and_control_generation.md
+```
