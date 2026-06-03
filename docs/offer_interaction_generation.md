@@ -31,3 +31,4 @@ Grain: One row per offer shown to one cardmember.
 fact_offer_activations
 Grain: One row per cardmember activating one offer.
 ```
+

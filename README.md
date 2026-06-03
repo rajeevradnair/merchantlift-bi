@@ -348,3 +348,38 @@ Documentation:
 ```text
 docs/redemption_and_control_generation.md
 ```
+
+
+
+## Financial, Fraud, and Reconciliation Event Generation
+
+MerchantLift BI generates the financial, fraud, and reconciliation layer after redemptions and control-group transactions are created.
+
+Generated tables:
+
+- fact_reward_liability
+- fact_merchant_settlements
+- fact_fraud_risk_events
+- fact_data_quality_reconciliation
+
+These tables support:
+
+- reward cost tracking
+- merchant settlement analytics
+- platform fee analytics
+- merchant net-after-reward analysis
+- fraud and offer-abuse monitoring
+- financial reconciliation
+- data quality validation
+
+Run the generator:
+
+PYTHONPATH=src python data_generation/generate_financial_risk_events.py
+
+Inspect generated outputs:
+
+PYTHONPATH=src python scripts/inspect_generated_financial_risk_events.py
+
+Documentation:
+
+docs/financial_risk_reconciliation_generation.md

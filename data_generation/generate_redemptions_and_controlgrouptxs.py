@@ -70,6 +70,7 @@ def load_required_inputs() -> tuple[
     pl.DataFrame,
     pl.DataFrame,
     pl.DataFrame,
+    pl.DataFrame,
 ]:
     """Load raw tables required for Day 18 generation.
 
@@ -86,12 +87,14 @@ def load_required_inputs() -> tuple[
         "fact_offer_customer_assignment"
     )
     dim_offer = read_raw_table("dim_offer")
+    dim_merchant = read_raw_table("dim_merchant")
 
     return (
         fact_transactions,
         fact_offer_activations,
         fact_offer_customer_assignment,
         dim_offer,
+        dim_merchant,
     )
 
 ################################################
@@ -316,6 +319,7 @@ def generate_offer_redemptions(
         fact_offer_activations,
         _,
         dim_offer,
+        _
     ) = load_required_inputs()
 
     enriched_activations = build_activation_offer_lookup(
@@ -414,6 +418,53 @@ def generate_control_transaction_amount(assignment: dict[str, Any]) -> float:
     return round(base_amount, 2)
 
 
+def build_fact_transactions_from_control_rows(
+    control_transactions: pl.DataFrame,
+    dim_merchant: pl.DataFrame,
+) -> pl.DataFrame:
+    """Convert control-group rows into fact_transactions-compatible rows.
+
+    Args:
+        control_transactions: fact_control_group_transactions DataFrame.
+        dim_merchant: Merchant dimension table used to derive category_id and location_id.
+
+    Returns:
+        DataFrame shaped like fact_transactions rows.
+    """
+    merchant_lookup = dim_merchant.select(
+        [
+            "merchant_id",
+            "category_id",
+            "location_id",
+        ]
+    )
+
+    control_fact_transactions = control_transactions.join(
+        merchant_lookup,
+        on="merchant_id",
+        how="left",
+    )
+
+    return control_fact_transactions.select(
+        [
+            "transaction_id",
+            "tokenized_cardmember_id",
+            "merchant_id",
+            "category_id",
+            "location_id",
+            "transaction_timestamp",
+            "transaction_date",
+            "transaction_amount",
+            pl.lit("settled").alias("transaction_status"),
+            "shopper_behavior_type",
+            "segment_id",
+            pl.lit(False).alias("is_test_group"),
+            pl.lit(True).alias("is_control_group"),
+            "created_at",
+        ]
+    )
+
+
 def generate_control_transaction_row(
     control_transaction_number: int,
     assignment: dict[str, Any],
@@ -429,11 +480,16 @@ def generate_control_transaction_row(
     """
     transaction_timestamp = generate_control_transaction_timestamp(assignment)
 
+    transaction_id = make_id("tx_ctrl", control_transaction_number)
+
+
+
     return {
         "control_transaction_id": make_id(
             "ctrl_tx",
             control_transaction_number,
         ),
+        "transaction_id": transaction_id,
         "control_assignment_id": assignment["assignment_id"],
         "tokenized_cardmember_id": assignment["tokenized_cardmember_id"],
         "merchant_id": assignment["merchant_id"],
@@ -491,12 +547,8 @@ def generate_control_group_transactions(
     Returns:
         A Polars DataFrame containing control-group transaction events.
     """
-    (
-        _,
-        _,
-        fact_offer_customer_assignment,
-        _,
-    ) = load_required_inputs()
+    
+    (_, _, fact_offer_customer_assignment, _, _,)  = load_required_inputs()
 
     eligible_control_assignments = fact_offer_customer_assignment.filter(
         (pl.col("assignment_group") == "control")
@@ -548,11 +600,21 @@ def main() -> None:
         row_count=control_rows,
     )
 
-    fact_transactions, _, _, _ = load_required_inputs()
+    fact_transactions, _, _, _, dim_merchant, = load_required_inputs()
+
+    control_fact_transactions = build_fact_transactions_from_control_rows(
+        control_transactions=control_transactions,
+        dim_merchant=dim_merchant,
+    )
 
     updated_transactions = append_supplemental_transactions(
         existing_transactions=fact_transactions,
         supplemental_transactions=supplemental_transactions,
+    )
+
+    updated_transactions = pl.concat(
+        [updated_transactions, control_fact_transactions],
+        how="vertical",
     )
 
     write_parquet_table(updated_transactions, "fact_transactions")

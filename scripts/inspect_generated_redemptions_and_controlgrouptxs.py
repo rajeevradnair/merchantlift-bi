@@ -75,6 +75,9 @@ def main() -> None:
         print("Sample orphan transaction IDs:")
         print(orphan_redemptions.head(10))
 
+    
+
+
     print("\n" + "=" * 80)
     print("fact_control_group_transactions")
     print("=" * 80)
@@ -115,6 +118,24 @@ def main() -> None:
         .sort("shopper_behavior_type")
     )
 
+    print("\nControl transaction lineage check:")
+    control_transaction_ids = control_transactions.select("transaction_id").unique()
+
+    orphan_control_transactions = control_transaction_ids.join(
+        transaction_ids,
+        on="transaction_id",
+        how="anti",
+    )
+
+    print(
+        "\nOrphan control transaction_ids: "
+        f"{orphan_control_transactions.height:,}"
+    )
+
+    if orphan_control_transactions.height > 0:
+        print("Sample orphan control transaction IDs:")
+        print(orphan_control_transactions.head(10))
+
     print("\n" + "=" * 80)
     print("Funnel summary")
     print("=" * 80)
@@ -124,6 +145,7 @@ def main() -> None:
 
     print("\nExpected good values:")
     print("- Orphan redemption transaction_ids should be 0")
+    print("- Orphan control transaction_ids should be 0")
     print("- Negative reward amounts should be 0")
     print("- Negative control amounts should be 0")
     print("- Duplicate redemption_id should be 0")
