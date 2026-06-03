@@ -428,3 +428,197 @@ Expected raw outputs include:
 Documentation:
 
 docs/raw_lake_generation_pipeline.md
+
+
+## Partitioning and Performance Strategy
+
+The lakehouse uses a simple performance rule:
+
+```text
+Partition by time.
+Cluster by business lookup keys.
+```
+
+Large fact tables should be partitioned by event date.
+
+Examples:
+
+| Table | Partition Column |
+|---|---|
+| `fact_transactions` | `transaction_date` |
+| `fact_offer_impressions` | `impression_date` |
+| `fact_offer_activations` | `activation_date` |
+| `fact_offer_redemptions` | `redemption_date` |
+| `fact_reward_liability` | `liability_date` |
+| `fact_merchant_settlements` | `settlement_date` |
+| `fact_fraud_risk_events` | `event_date` |
+| `fact_data_quality_reconciliation` | `reconciliation_date` |
+
+Common clustering or Z-ordering keys include:
+
+```text
+merchant_id
+offer_id
+campaign_id
+transaction_id
+tokenized_cardmember_id
+risk_rule_name
+reconciliation_status
+```
+
+This layout helps Spark, Delta Lake, BigQuery, and dashboard workloads avoid unnecessary scans.
+
+---
+
+## Schema Enforcement and Evolution
+
+MerchantLift BI treats schema as a contract.
+
+The more trusted the layer, the stricter the schema.
+
+```text
+Raw can be flexible.
+Bronze should detect.
+Silver should enforce.
+Gold should protect business meaning.
+```
+
+Allowed non-breaking changes include:
+
+```text
+adding nullable metadata columns
+adding optional descriptive fields
+adding new documented metric columns
+adding approved enum values
+```
+
+Risky or breaking changes include:
+
+```text
+renaming columns
+dropping columns
+changing data types
+changing table grain
+changing metric definitions
+changing primary key logic
+```
+
+The core rule is:
+
+```text
+Do not let accidental schema changes become business truth.
+```
+
+---
+
+## Data Quality Gates
+
+MerchantLift BI defines quality gates by layer.
+
+A quality gate asks:
+
+```text
+Is this data good enough to move forward?
+```
+
+Quality gates become stricter as data moves downstream.
+
+| Layer | Quality Gate Focus |
+|---|---|
+| Raw | File exists, file is readable, minimum row count, expected columns |
+| Bronze | Ingestion metadata, row-count match, schema drift detection |
+| Silver | Primary keys, required fields, accepted values, lineage, financial formulas |
+| Gold | Business formulas, aggregation grain, privacy suppression, dashboard-safe outputs |
+
+Examples of important checks:
+
+```text
+No redemption without a real transaction.
+No control transaction without a real transaction.
+No reward liability without a redemption.
+No merchant settlement without a transaction.
+No exposed small cohort in privacy-safe reporting.
+```
+
+Short version:
+
+```text
+Quality gates prevent bad events from becoming bad decisions.
+```
+
+---
+
+## Metric Lineage
+
+MerchantLift BI includes a lineage strategy so Gold metrics can be traced back to trusted Silver rows and Raw source files.
+
+The core idea is:
+
+```text
+Gold stores the number.
+Lineage proves the number.
+```
+
+The lineage design uses two planned tables:
+
+```text
+gold_metric_lineage_summary
+gold_metric_lineage_detail
+```
+
+### Summary Lineage
+
+Summary lineage records:
+
+```text
+gold_table_name
+gold_row_id
+source_table_name
+source_row_count
+source_role
+join_type
+join_keys
+filter_condition
+aggregation_formula
+metric_definition_version
+pipeline_run_id
+```
+
+This proves how many source rows and which transformation logic contributed to a Gold row.
+
+### Detail Lineage
+
+Detail lineage records exact source records:
+
+```text
+gold_table_name
+gold_row_id
+source_table_name
+source_primary_key_column
+source_primary_key_value
+source_role
+pipeline_run_id
+```
+
+This proves exactly which Silver rows created an aggregated Gold metric.
+
+Example:
+
+```text
+gold.merchant_daily_economics
+    <- silver.fact_transactions_clean
+    <- silver.fact_reward_liability_clean
+    <- silver.fact_merchant_settlements_clean
+```
+
+Lineage makes dashboard numbers auditable for finance, risk, compliance, and engineering review.
+
+---
+
+## Lakehouse Documentation
+
+Detailed lakehouse design is documented in:
+
+```text
+docs/lakehouse_architecture.md
+```
