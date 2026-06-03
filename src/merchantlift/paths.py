@@ -27,3 +27,8 @@ GOLD_DATA_DIR = DATA_DIR / "gold"
 SAMPLE_DATA_DIR = DATA_DIR / "samples"
 
 
+LAKEHOUSE_DIR = PROJECT_ROOT / "data" / "lakehouse"
+BRONZE_DIR = LAKEHOUSE_DIR / "bronze"
+SILVER_DIR = LAKEHOUSE_DIR / "silver"
+GOLD_DIR = LAKEHOUSE_DIR / "gold"
+
