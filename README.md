@@ -383,3 +383,48 @@ PYTHONPATH=src python scripts/inspect_generated_financial_risk_events.py
 Documentation:
 
 docs/financial_risk_reconciliation_generation.md
+
+
+
+## Raw Lake Generation Pipeline
+
+MerchantLift BI includes a raw lake generation orchestrator that runs all synthetic data generators in dependency order.
+
+The orchestrator is:
+
+data_generation/generate_all.py
+
+It runs:
+
+1. data_generation/10_generate_dimensions.py
+2. data_generation/20_generate_transactions.py
+3. data_generation/30_generate_offer_interactions.py
+4. data_generation/40_generate_testgroupredemptions_and_controlgrouptxs.py
+5. data_generation/50_generate_rewardliability_settlements_fraudriskevents_reconciliations.py
+
+Run the full raw lake generation pipeline:
+
+PYTHONPATH=src python data_generation/generate_all.py
+
+The orchestrator:
+
+- runs all generators in dependency order
+- stops immediately if a generator fails
+- validates all expected raw Parquet outputs
+- prints row counts for every generated table
+- logs total elapsed time
+
+Expected raw outputs include:
+
+- dimension tables
+- transaction facts
+- offer assignment, impression, and activation facts
+- redemption and control-group facts
+- reward liability
+- merchant settlements
+- fraud-risk events
+- data-quality reconciliation records
+
+Documentation:
+
+docs/raw_lake_generation_pipeline.md

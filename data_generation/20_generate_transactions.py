@@ -1,5 +1,4 @@
 from __future__ import annotations
-from generate_dimensions import make_id
 from typing import Any
 import polars as pl
 from merchantlift.config import load_yaml_config
@@ -9,6 +8,10 @@ from datetime import date, datetime, time, timedelta
 
 def get_config() -> dict[str, Any]:
     return load_yaml_config(CONFIG_DIR / "project_settings.yaml")
+
+def make_id(prefix: str, number: int, width: int = 9) -> str:
+    """Create deterministic business event IDs."""
+    return f"{prefix}_{number:0{width}d}"
 
 def write_parquet_table(df: pl.DataFrame, table_name: str) -> None:
     output_dir = RAW_DATA_DIR / table_name
