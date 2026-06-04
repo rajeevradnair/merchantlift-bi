@@ -5,6 +5,16 @@ from __future__ import annotations
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
 
+
+def running_in_databricks() -> bool:
+    """Return whether code is running inside Databricks."""
+    return (
+        "DATABRICKS_RUNTIME_VERSION" in os.environ
+        or "DATABRICKS_CLUSTER_ID" in os.environ
+        or "SPARK_CONNECT_MODE_ENABLED" in os.environ
+    )
+
+
 def create_spark_session(app_name: str) -> SparkSession:
     """Create a Spark session configured for local Delta Lake work.
 
@@ -14,6 +24,15 @@ def create_spark_session(app_name: str) -> SparkSession:
     Returns:
         Configured SparkSession.
     """
+
+    active_session = SparkSession.getActiveSession()
+
+    if active_session is not None:
+        return active_session
+
+    if running_in_databricks():
+        return SparkSession.builder.getOrCreate()
+
     builder = (
         SparkSession.builder
         .appName(app_name)
