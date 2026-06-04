@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
+
 from pyspark.sql import SparkSession
-from delta import configure_spark_with_delta_pip
 
 
 def running_in_databricks() -> bool:
@@ -16,15 +17,14 @@ def running_in_databricks() -> bool:
 
 
 def create_spark_session(app_name: str) -> SparkSession:
-    """Create a Spark session configured for local Delta Lake work.
+    """Create or reuse a Spark session.
 
     Args:
         app_name: Human-readable Spark application name.
 
     Returns:
-        Configured SparkSession.
+        SparkSession.
     """
-
     active_session = SparkSession.getActiveSession()
 
     if active_session is not None:
@@ -32,6 +32,8 @@ def create_spark_session(app_name: str) -> SparkSession:
 
     if running_in_databricks():
         return SparkSession.builder.getOrCreate()
+
+    from delta import configure_spark_with_delta_pip
 
     builder = (
         SparkSession.builder
@@ -49,9 +51,3 @@ def create_spark_session(app_name: str) -> SparkSession:
     )
 
     return configure_spark_with_delta_pip(builder).getOrCreate()
-
-
-if __name__ == "__main__":
-    # Quick smoke test to verify Spark session creation works.
-    ss = create_spark_session("Spark Session Smoke Test")
-    print(ss.appName)
