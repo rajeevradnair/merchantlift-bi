@@ -235,9 +235,14 @@ def validate_bronze_tables(spark) -> None:
 
     print("Bronze validation passed.")
 
-def main() -> None:
-    """Ingest all configured raw tables into the Bronze Delta layer."""
-    spark = create_spark_session("merchantlift-bronze-ingestion")
+def main(spark_session=None) -> None:
+    """Ingest configured raw tables into the Bronze Delta layer."""
+    if spark_session is None:
+        spark = create_spark_session("merchantlift-bronze-ingestion")
+        should_stop_spark = True
+    else:
+        spark = spark_session
+        should_stop_spark = False
 
     pipeline_run_id = build_pipeline_run_id()
 
@@ -279,7 +284,8 @@ def main() -> None:
         validate_bronze_tables(spark)
 
     finally:
-        spark.stop()
+        if should_stop_spark:
+            spark.stop()
 
 
 if __name__ == "__main__":
