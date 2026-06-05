@@ -237,7 +237,7 @@ def validate_bronze_tables(spark) -> None:
 
 def main() -> None:
     """Ingest all configured raw tables into the Bronze Delta layer."""
-    spark = create_spark_session("merchantlift-bronze-ingestion")
+    #spark = create_spark_session("merchantlift-bronze-ingestion")
 
     pipeline_run_id = build_pipeline_run_id()
 
