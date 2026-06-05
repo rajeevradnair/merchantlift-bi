@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession
 
-
 def create_spark_session(app_name: str) -> SparkSession:
+
+    active_session = SparkSession.getActiveSession()
+    if active_session is not None:
+        return active_session
+    # Only configure master if not in Databricks
+    return SparkSession.builder.appName(app_name).getOrCreate()
+
+
+def create_spark_session_1(app_name: str) -> SparkSession:
     """Create or reuse a Spark session."""
     print("=" * 80)
     print("create_spark_session called")
