@@ -442,23 +442,11 @@ def validate_silver_table(
         required_columns=required_columns,
     )
 
-
-def validate_silver_relationships(
+def validate_silver_relationship(
     spark,
     relationship_config: SilverRelationshipConfig,
 ) -> tuple[str, int]:
-    """Validate one parent-child relationship between Silver tables.
-
-    Args:
-        spark: Active Spark session.
-        relationship_config: Relationship validation config.
-
-    Returns:
-        Tuple of relationship name and orphan key count.
-
-    Raises:
-        ValueError: If required columns are missing.
-    """
+    """Validate one parent-child relationship between Silver tables."""
     child_df = read_silver_table(
         spark=spark,
         table_name=relationship_config.child_table_name,
@@ -507,6 +495,48 @@ def validate_silver_relationships(
     return relationship_config.relationship_name, orphan_count
 
 
+def validate_all_silver_relationships(spark) -> None:
+    """Validate all configured Silver referential integrity checks."""
+    print("\nSilver referential integrity summary")
+    print("=" * 80)
+    print(
+        f"{'relationship':<45} "
+        f"{'orphan_keys':>12} "
+        f"{'status':>10}"
+    )
+    print("-" * 80)
+
+    failed_relationships = []
+
+    for relationship_config in SILVER_RELATIONSHIPS:
+        relationship_name, orphan_count = validate_silver_relationship(
+            spark=spark,
+            relationship_config=relationship_config,
+        )
+
+        if orphan_count == 0:
+            status = "PASSED"
+        else:
+            status = "FAILED"
+            failed_relationships.append(
+                f"{relationship_name} ({orphan_count:,} orphan keys)"
+            )
+
+        print(
+            f"{relationship_name:<45} "
+            f"{orphan_count:>12,} "
+            f"{status:>10}"
+        )
+
+    print("=" * 80)
+
+    if failed_relationships:
+        raise ValueError(
+            "Silver referential integrity validation failed: "
+            + "; ".join(failed_relationships)
+        )
+
+    print("Silver referential integrity validation passed.")
 
 def main(spark_session=None) -> None:
     """Clean one Bronze table and inspect the Silver output."""
@@ -580,7 +610,7 @@ def main(spark_session=None) -> None:
         )
         print("=" * 80)
 
-        validate_silver_relationships(spark)
+        validate_all_silver_relationships(spark)
 
         print("\nSilver transformations complete.")
 
