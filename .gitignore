@@ -12,6 +12,8 @@ venv/
 .coverage
 htmlcov/
 
+tmp/
+
 # Local data outputs
 data/raw/**
 data/bronze/**
@@ -39,3 +41,21 @@ logs/
 # Power BI local artifacts
 *.pbix
 *.pbit
+
+# Generated local data
+data/raw/
+data/lakehouse/
+data/tmp/
+
+# Spark / Hadoop local metadata
+*.crc
+_SUCCESS
+_committed_*
+_started_*
+
+# Python / local runtime
+__pycache__/
+*.pyc
+.venv/
+.env
+.DS_Store
