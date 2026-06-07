@@ -8,7 +8,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
 from merchantlift.paths import BRONZE_DIR, RAW_DATA_DIR
-from merchantlift.spark import create_spark_session
+from merchantlift.spark import create_spark_session, create_spark_session_local
 
 from merchantlift.bronze_config import BRONZE_TABLES, BronzeTableConfig
 
@@ -238,7 +238,7 @@ def validate_bronze_tables(spark) -> None:
 def main(spark_session=None) -> None:
     """Ingest configured raw tables into the Bronze Delta layer."""
     if spark_session is None:
-        spark = create_spark_session("merchantlift-bronze-ingestion")
+        spark = create_spark_session_local("merchantlift-bronze-ingestion")
         should_stop_spark = True
     else:
         spark = spark_session
