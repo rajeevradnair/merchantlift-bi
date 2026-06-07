@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pyspark.sql import SparkSession
+from delta import configure_spark_with_delta_pip
+
 
 def create_spark_session(app_name: str) -> SparkSession:
 
@@ -41,3 +43,34 @@ def create_spark_session_1(app_name: str) -> SparkSession:
     print("=" * 80)
 
     return spark
+
+
+
+
+def create_spark_session_local(app_name: str) -> SparkSession:
+    """Create a local Spark session configured for Delta Lake.
+
+    Args:
+        app_name: Human-readable Spark application name.
+
+    Returns:
+        Configured SparkSession.
+    """
+    builder = (
+        SparkSession.builder
+        .appName(app_name)
+        .master("local[*]")
+        .config(
+            "spark.sql.extensions",
+            "io.delta.sql.DeltaSparkSessionExtension",
+        )
+        .config(
+            "spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+        )
+        .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.driver.memory", "4g")
+        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
+    )
+
+    return configure_spark_with_delta_pip(builder).getOrCreate()
