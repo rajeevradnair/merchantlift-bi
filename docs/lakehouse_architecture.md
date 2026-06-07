@@ -3344,3 +3344,66 @@ Create the metric and its lineage in the same transformation job.
 This keeps the business metric and its proof synchronized.
 
 ---
+
+
+## Silver Layer Implementation Notes
+
+The Silver layer is implemented as a config-driven Spark transformation pipeline.
+
+The configuration is stored in:
+
+```text
+src/merchantlift/silver_config.py
+```
+
+The transformation job is stored in:
+
+```text
+spark_jobs/silver_transformations.py
+```
+
+The job reads Bronze Delta tables from:
+
+```text
+data/lakehouse/bronze/
+```
+
+and writes Silver Delta tables to:
+
+```text
+data/lakehouse/silver/
+```
+
+Silver tables use the `_clean` suffix.
+
+Example:
+
+```text
+bronze.fact_transactions
+    -> silver.fact_transactions_clean
+```
+
+The Silver job applies common cleaning rules across all configured tables:
+
+```text
+drop null primary keys
+deduplicate by primary key
+cast configured numeric columns
+normalize configured timestamp columns
+normalize configured date columns
+add Silver transformation metadata
+```
+
+After writing Silver tables, the job validates:
+
+```text
+read-back row counts
+required columns
+Silver metadata
+critical parent-child relationships
+```
+
+The critical referential checks ensure that child fact tables remain connected to parent transaction and redemption records.
+
+
+

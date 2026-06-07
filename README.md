@@ -622,3 +622,67 @@ Detailed lakehouse design is documented in:
 ```text
 docs/lakehouse_architecture.md
 ```
+
+## Silver Cleaning Layer
+
+MerchantLift BI includes a Spark/Delta Silver cleaning layer that transforms Bronze Delta tables into trusted Silver Delta tables.
+
+The Silver layer performs:
+
+```text
+primary-key deduplication
+numeric casting
+timestamp normalization
+date normalization
+Silver transformation metadata
+row-count validation
+required-column validation
+referential integrity validation
+```
+
+The core purpose of Silver is to answer:
+
+```text
+Can downstream analytics trust this row?
+```
+
+Silver tables are written under:
+
+```text
+data/lakehouse/silver/
+```
+
+Example:
+
+```text
+data/lakehouse/silver/fact_transactions_clean/
+```
+
+The Silver pipeline validates critical relationships such as:
+
+```text
+redemptions -> transactions
+control transactions -> transactions
+reward liabilities -> redemptions
+settlements -> transactions
+fraud events -> transactions
+reconciliation checks -> transactions
+```
+
+This ensures that downstream Gold metrics for merchant economics, incrementality, reward liability, fraud/abuse, and reconciliation are built on coherent, trusted data.
+
+Primary files:
+
+```text
+src/merchantlift/silver_config.py
+spark_jobs/silver_transformations.py
+```
+
+Run locally:
+
+```bash
+PYTHONPATH=src python spark_jobs/silver_transformations.py
+```
+
+
+
