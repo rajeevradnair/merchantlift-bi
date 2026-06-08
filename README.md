@@ -685,4 +685,82 @@ PYTHONPATH=src python spark_jobs/silver_transformations.py
 ```
 
 
+## Transaction-to-Offer Redemption Matching
+
+MerchantLift BI includes a Spark/Delta redemption matching job that derives matched redemptions from trusted Silver data.
+
+Primary job:
+
+```text
+spark_jobs/build_redemption_matching.py
+```
+
+Primary output:
+
+```text
+data/lakehouse/silver/fact_matched_offer_redemptions_clean/
+```
+
+The job reads:
+
+```text
+fact_transactions_clean
+fact_offer_activations_clean
+dim_offer_clean
+```
+
+It applies the following matching rules:
+
+```text
+same tokenized cardmember
+same merchant
+transaction timestamp after activation
+transaction timestamp before offer expiry
+transaction amount >= minimum spend
+eligible transaction status
+eligible activation status
+```
+
+It calculates reward using the current offer schema:
+
+```text
+calculated_reward_amount = reward_amount
+```
+
+It generates deterministic matched redemption IDs from:
+
+```text
+transaction_id
+activation_id
+offer_id
+```
+
+It deduplicates multiple possible matches per transaction using:
+
+```text
+highest reward amount
+earliest activation timestamp
+lowest offer_id
+```
+
+It writes the trusted matched output as a partitioned Silver Delta table.
+
+Run locally:
+
+```bash
+PYTHONPATH=src python spark_jobs/build_redemption_matching.py
+```
+
+Run in Databricks:
+
+```bash
+cd /Workspace/Repos/<your-folder>/merchantlift-bi
+
+export MERCHANTLIFT_LAKEHOUSE_DIR=/dbfs/FileStore/merchantlift/data/lakehouse
+export MERCHANTLIFT_BRONZE_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/bronze
+export MERCHANTLIFT_SILVER_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/silver
+export MERCHANTLIFT_GOLD_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/gold
+
+PYTHONPATH=src python spark_jobs/build_redemption_matching.py
+```
 
