@@ -44,6 +44,7 @@ GOLD_INCREMENTALITY_FEATURES_REQUIRED_COLUMNS = (
     "estimated_incremental_margin_amount",
     "estimated_incremental_cogs_amount",
     "estimated_incremental_platform_fee_amount",
+    "platform_fee_revenue_base_amount",
     "funded_reward_cost_amount",
     "net_merchant_profit_amount",
     "net_profit_per_test_cardmember",
@@ -288,8 +289,15 @@ def calculate_profitability_base_metrics(
             - F.col("estimated_incremental_margin_amount"),
         )
         .withColumn(
+            "platform_fee_revenue_base_amount",
+            F.when(
+                F.col("incremental_revenue_amount") > 0,
+                F.col("incremental_revenue_amount"),
+            ).otherwise(F.lit(0.0)),
+        )
+        .withColumn(
             "estimated_incremental_platform_fee_amount",
-            F.col("incremental_revenue_amount")
+            F.col("platform_fee_revenue_base_amount")
             * F.col("normalized_platform_fee_rate"),
         )
     )
@@ -678,6 +686,380 @@ def write_and_validate_gold_incrementality_features(
         expected_row_count=expected_row_count,
     )
 
+def validate_gold_incrementality_features_business_rules(
+    spark,
+) -> tuple[str, int]:
+    """Validate business rules for Gold incrementality features.
+
+    Args:
+        spark: Active Spark session.
+
+    Returns:
+        Table name and validation failure count.
+    """
+    df = read_gold_table(
+        spark=spark,
+        table_name=GOLD_INCREMENTALITY_FEATURES_TABLE,
+    )
+
+    require_columns(
+        df=df,
+        table_name=GOLD_INCREMENTALITY_FEATURES_TABLE,
+        required_columns=GOLD_INCREMENTALITY_FEATURES_REQUIRED_COLUMNS,
+    )
+
+    duplicate_grain_count = (
+        df
+        .groupBy(
+            "business_date",
+            "offer_id",
+            "campaign_id",
+            "merchant_id",
+        )
+        .count()
+        .filter(F.col("count") > 1)
+        .count()
+    )
+
+    null_required_count = (
+        df
+        .filter(
+            F.col("business_date").isNull()
+            | F.col("offer_id").isNull()
+            | F.col("campaign_id").isNull()
+            | F.col("merchant_id").isNull()
+            | F.col("incremental_revenue_amount").isNull()
+            | F.col("funded_reward_cost_amount").isNull()
+            | F.col("estimated_incremental_margin_amount").isNull()
+            | F.col("estimated_incremental_platform_fee_amount").isNull()
+            | F.col("net_merchant_profit_amount").isNull()
+            | F.col("profitability_status").isNull()
+            | F.col("efficiency_status").isNull()
+            | F.col("profitability_pipeline_run_id").isNull()
+            | F.col("profitability_rule_version").isNull()
+            | F.col("profitability_created_at").isNull()
+        )
+        .count()
+    )
+
+    invalid_rate_count = (
+        df
+        .filter(
+            (F.col("normalized_merchant_margin_rate") < 0)
+            | (F.col("normalized_merchant_margin_rate") > 1)
+            | (F.col("normalized_platform_fee_rate") < 0)
+            | (F.col("normalized_platform_fee_rate") > 1)
+            | (F.col("merchant_margin_rate") < 0)
+            | (F.col("merchant_margin_rate") > 1)
+            | (F.col("platform_fee_rate") < 0)
+            | (F.col("platform_fee_rate") > 1)
+        )
+        .count()
+    )
+
+    negative_cost_count = (
+        df
+        .filter(
+            (F.col("funded_reward_cost_amount") < 0)
+            | (F.col("total_test_reward_amount") < 0)
+            | (F.col("total_offer_cost_amount") < 0)
+            | (F.col("minimum_spend_amount") < 0)
+            | (F.col("reward_amount") < 0)
+        )
+        .count()
+    )
+
+    invalid_profitability_status_count = (
+        df
+        .filter(
+            ~F.col("profitability_status").isin(
+                "profitable",
+                "unprofitable",
+                "break_even",
+            )
+        )
+        .count()
+    )
+
+    invalid_efficiency_status_count = (
+        df
+        .filter(
+            ~F.col("efficiency_status").isin(
+                "highly_efficient",
+                "efficient",
+                "profitable_but_low_efficiency",
+                "revenue_positive_but_profit_negative",
+                "negative_incrementality",
+                "needs_review",
+            )
+        )
+        .count()
+    )
+
+    margin_formula_mismatch_count = (
+        df
+        .withColumn(
+            "expected_incremental_margin_amount",
+            F.col("incremental_revenue_amount")
+            * F.col("normalized_merchant_margin_rate"),
+        )
+        .filter(
+            F.abs(
+                F.col("estimated_incremental_margin_amount")
+                - F.col("expected_incremental_margin_amount")
+            ) > 0.01
+        )
+        .count()
+    )
+
+    cogs_formula_mismatch_count = (
+        df
+        .withColumn(
+            "expected_incremental_cogs_amount",
+            F.col("incremental_revenue_amount")
+            - F.col("estimated_incremental_margin_amount"),
+        )
+        .filter(
+            F.abs(
+                F.col("estimated_incremental_cogs_amount")
+                - F.col("expected_incremental_cogs_amount")
+            ) > 0.01
+        )
+        .count()
+    )
+
+    platform_fee_formula_mismatch_count = (
+        df
+        .withColumn(
+            "expected_platform_fee_revenue_base_amount",
+            F.when(
+                F.col("incremental_revenue_amount") > 0,
+                F.col("incremental_revenue_amount"),
+            ).otherwise(F.lit(0.0)),
+        )
+        .withColumn(
+            "expected_platform_fee_amount",
+            F.col("expected_platform_fee_revenue_base_amount")
+            * F.col("normalized_platform_fee_rate"),
+        )
+        .filter(
+            (
+                F.abs(
+                    F.col("platform_fee_revenue_base_amount")
+                    - F.col("expected_platform_fee_revenue_base_amount")
+                ) > 0.01
+            )
+            | (
+                F.abs(
+                    F.col("estimated_incremental_platform_fee_amount")
+                    - F.col("expected_platform_fee_amount")
+                ) > 0.01
+            )
+        )
+        .count()
+    )
+
+    net_profit_formula_mismatch_count = (
+        df
+        .withColumn(
+            "expected_net_merchant_profit_amount",
+            F.col("estimated_incremental_margin_amount")
+            - F.col("funded_reward_cost_amount")
+            - F.col("estimated_incremental_platform_fee_amount"),
+        )
+        .filter(
+            F.abs(
+                F.col("net_merchant_profit_amount")
+                - F.col("expected_net_merchant_profit_amount")
+            ) > 0.01
+        )
+        .count()
+    )
+
+    total_offer_cost_formula_mismatch_count = (
+        df
+        .withColumn(
+            "expected_total_offer_cost_amount",
+            F.col("funded_reward_cost_amount")
+            + F.col("estimated_incremental_platform_fee_amount"),
+        )
+        .filter(
+            F.abs(
+                F.col("total_offer_cost_amount")
+                - F.col("expected_total_offer_cost_amount")
+            ) > 0.01
+        )
+        .count()
+    )
+
+    roas_formula_mismatch_count = (
+        df
+        .withColumn(
+            "expected_reward_roas",
+            safe_divide(
+                F.col("incremental_revenue_amount"),
+                F.col("funded_reward_cost_amount"),
+            ),
+        )
+        .withColumn(
+            "expected_total_cost_roas",
+            safe_divide(
+                F.col("incremental_revenue_amount"),
+                F.col("total_offer_cost_amount"),
+            ),
+        )
+        .withColumn(
+            "expected_margin_roas",
+            safe_divide(
+                F.col("estimated_incremental_margin_amount"),
+                F.col("total_offer_cost_amount"),
+            ),
+        )
+        .withColumn(
+            "expected_net_profit_roas",
+            safe_divide(
+                F.col("net_merchant_profit_amount"),
+                F.col("total_offer_cost_amount"),
+            ),
+        )
+        .filter(
+            (F.abs(F.col("reward_roas") - F.col("expected_reward_roas")) > 0.0001)
+            | (F.abs(F.col("total_cost_roas") - F.col("expected_total_cost_roas")) > 0.0001)
+            | (F.abs(F.col("margin_roas") - F.col("expected_margin_roas")) > 0.0001)
+            | (F.abs(F.col("net_profit_roas") - F.col("expected_net_profit_roas")) > 0.0001)
+        )
+        .count()
+    )
+
+    profitability_label_mismatch_count = (
+        df
+        .withColumn(
+            "expected_profitability_status",
+            F.when(
+                F.col("net_merchant_profit_amount") > 0,
+                F.lit("profitable"),
+            )
+            .when(
+                F.col("net_merchant_profit_amount") < 0,
+                F.lit("unprofitable"),
+            )
+            .otherwise(F.lit("break_even")),
+        )
+        .filter(
+            F.col("profitability_status")
+            != F.col("expected_profitability_status")
+        )
+        .count()
+    )
+
+    decision_flag_mismatch_count = (
+        df
+        .withColumn(
+            "expected_profitable_incremental_offer_flag",
+            (F.col("incremental_revenue_amount") > 0)
+            & (F.col("net_merchant_profit_amount") > 0),
+        )
+        .withColumn(
+            "expected_spend_lift_but_profit_loss_flag",
+            (F.col("incremental_revenue_amount") > 0)
+            & (F.col("net_merchant_profit_amount") < 0),
+        )
+        .withColumn(
+            "expected_negative_lift_and_unprofitable_flag",
+            (F.col("incremental_revenue_amount") < 0)
+            & (F.col("net_merchant_profit_amount") < 0),
+        )
+        .filter(
+            (F.col("profitable_incremental_offer_flag")
+             != F.col("expected_profitable_incremental_offer_flag"))
+            | (F.col("spend_lift_but_profit_loss_flag")
+               != F.col("expected_spend_lift_but_profit_loss_flag"))
+            | (F.col("negative_lift_and_unprofitable_flag")
+               != F.col("expected_negative_lift_and_unprofitable_flag"))
+        )
+        .count()
+    )
+
+    failure_count = (
+        duplicate_grain_count
+        + null_required_count
+        + invalid_rate_count
+        + negative_cost_count
+        + invalid_profitability_status_count
+        + invalid_efficiency_status_count
+        + margin_formula_mismatch_count
+        + cogs_formula_mismatch_count
+        + platform_fee_formula_mismatch_count
+        + net_profit_formula_mismatch_count
+        + total_offer_cost_formula_mismatch_count
+        + roas_formula_mismatch_count
+        + profitability_label_mismatch_count
+        + decision_flag_mismatch_count
+    )
+
+    print("\nGold incrementality features business-rule validation")
+    print("=" * 80)
+    print(f"{'duplicate grain rows':<55} {duplicate_grain_count:>12,}")
+    print(f"{'null required rows':<55} {null_required_count:>12,}")
+    print(f"{'invalid rate rows':<55} {invalid_rate_count:>12,}")
+    print(f"{'negative cost rows':<55} {negative_cost_count:>12,}")
+    print(f"{'invalid profitability status rows':<55} {invalid_profitability_status_count:>12,}")
+    print(f"{'invalid efficiency status rows':<55} {invalid_efficiency_status_count:>12,}")
+    print(f"{'margin formula mismatch rows':<55} {margin_formula_mismatch_count:>12,}")
+    print(f"{'COGS formula mismatch rows':<55} {cogs_formula_mismatch_count:>12,}")
+    print(f"{'platform fee formula mismatch rows':<55} {platform_fee_formula_mismatch_count:>12,}")
+    print(f"{'net profit formula mismatch rows':<55} {net_profit_formula_mismatch_count:>12,}")
+    print(f"{'total offer cost formula mismatch rows':<55} {total_offer_cost_formula_mismatch_count:>12,}")
+    print(f"{'ROAS formula mismatch rows':<55} {roas_formula_mismatch_count:>12,}")
+    print(f"{'profitability label mismatch rows':<55} {profitability_label_mismatch_count:>12,}")
+    print(f"{'decision flag mismatch rows':<55} {decision_flag_mismatch_count:>12,}")
+    print(f"{'total validation failures':<55} {failure_count:>12,}")
+    print("=" * 80)
+
+    return GOLD_INCREMENTALITY_FEATURES_TABLE, failure_count
+
+
+def validate_all_profitability_outputs(spark) -> None:
+    """Validate all profitability feature outputs.
+
+    Args:
+        spark: Active Spark session.
+
+    Raises:
+        ValueError: If any profitability output fails validation.
+    """
+    print("\nValidating profitability outputs")
+    print("=" * 80)
+
+    validation_results = [
+        validate_gold_incrementality_features_business_rules(spark=spark),
+    ]
+
+    print("\nProfitability validation summary")
+    print("=" * 80)
+    print(f"{'table':<40} {'failures':>12} {'status':>12}")
+    print("-" * 80)
+
+    failed_tables = []
+
+    for table_name, failure_count in validation_results:
+        status = "PASSED" if failure_count == 0 else "FAILED"
+
+        if failure_count > 0:
+            failed_tables.append(table_name)
+
+        print(f"{table_name:<40} {failure_count:>12,} {status:>12}")
+
+    print("=" * 80)
+
+    if failed_tables:
+        raise ValueError(
+            "Profitability output validation failed for: "
+            + ", ".join(failed_tables)
+        )
+
+    print("All profitability output validations passed.")
+
 
 
 def main(spark_session=None) -> None:
@@ -930,6 +1312,8 @@ def main(spark_session=None) -> None:
     )
 
     print("\nGold incrementality features Delta table written and validated.")
+
+    validate_all_profitability_outputs(spark=spark)
 
     if should_stop_spark:
         spark.stop()
