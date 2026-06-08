@@ -241,6 +241,85 @@ def build_match_ready_activations(
     return filtered_df.select(*selected_columns)
 
 
+def build_offer_rules(
+    offers_df: DataFrame,
+) -> DataFrame:
+    """Prepare Silver offers for redemption matching.
+
+    Args:
+        offers_df: Silver offers DataFrame.
+
+    Returns:
+        Offer rules DataFrame with matching columns.
+    """
+    required_columns = (
+        "offer_id",
+        "campaign_id",
+        "merchant_id",
+        "minimum_spend_amount",
+        "reward_amount",
+    )
+
+    require_columns(
+        df=offers_df,
+        table_name=OFFERS_TABLE,
+        required_columns=required_columns,
+    )
+
+    return (
+        offers_df
+        .filter(F.col("offer_id").isNotNull())
+        .filter(F.col("campaign_id").isNotNull())
+        .filter(F.col("merchant_id").isNotNull())
+        .filter(F.col("minimum_spend_amount").isNotNull())
+        .filter(F.col("reward_amount").isNotNull())
+        .filter(F.col("minimum_spend_amount") >= 0)
+        .filter(F.col("reward_amount") >= 0)
+        .select(
+            "offer_id",
+            "campaign_id",
+            "merchant_id",
+            "minimum_spend_amount",
+            "reward_amount",
+        )
+        .dropDuplicates(["offer_id"])
+    )
+
+
+def build_activation_offer_candidates(
+    activations_df: DataFrame,
+    offer_rules_df: DataFrame,
+) -> DataFrame:
+    """Attach offer rules to match-ready activations.
+
+    Args:
+        activations_df: Match-ready activations.
+        offer_rules_df: Prepared offer rules.
+
+    Returns:
+        Activation-offer candidates for transaction matching.
+    """
+    return (
+        activations_df.alias("act")
+        .join(
+            F.broadcast(offer_rules_df).alias("offer"),
+            F.col("act.offer_id") == F.col("offer.offer_id"),
+            "inner",
+        )
+        .select(
+            F.col("act.activation_id"),
+            F.col("act.tokenized_cardmember_id"),
+            F.col("act.offer_id"),
+            F.col("offer.campaign_id"),
+            F.col("offer.merchant_id"),
+            F.col("act.activation_timestamp"),
+            F.col("act.offer_expiry_timestamp"),
+            F.col("offer.minimum_spend_amount"),
+            F.col("offer.reward_amount"),
+        )
+    )
+
+
 def write_silver_table(
     df: DataFrame,
     table_name: str,
@@ -268,6 +347,121 @@ def write_silver_table(
     writer.save(str(output_path))
 
     print(f"Wrote Silver Delta table: {output_path}")
+
+
+def build_transaction_offer_candidates(
+    transactions_df: DataFrame,
+    activation_offer_candidates_df: DataFrame,
+) -> DataFrame:
+    """Build transaction-to-offer redemption candidates.
+
+    Args:
+        transactions_df: Match-ready transactions.
+        activation_offer_candidates_df: Activation rows enriched with offer rules.
+
+    Returns:
+        Candidate redemption matches.
+    """
+    tx = transactions_df.alias("tx")
+    act = activation_offer_candidates_df.alias("act")
+
+    return (
+        tx
+        .join(
+            act,
+            (
+                (F.col("tx.tokenized_cardmember_id") == F.col("act.tokenized_cardmember_id"))
+                & (F.col("tx.merchant_id") == F.col("act.merchant_id"))
+                & (F.col("tx.transaction_timestamp") >= F.col("act.activation_timestamp"))
+                & (F.col("tx.transaction_timestamp") <= F.col("act.offer_expiry_timestamp"))
+                & (F.col("tx.transaction_amount") >= F.col("act.minimum_spend_amount"))
+            ),
+            "inner",
+        )
+        .select(
+            F.col("tx.transaction_id"),
+            F.col("tx.tokenized_cardmember_id"),
+            F.col("tx.merchant_id"),
+            F.col("tx.transaction_timestamp"),
+            F.col("tx.transaction_date"),
+            F.col("tx.transaction_amount"),
+            F.col("act.activation_id"),
+            F.col("act.offer_id"),
+            F.col("act.campaign_id"),
+            F.col("act.activation_timestamp"),
+            F.col("act.offer_expiry_timestamp"),
+            F.col("act.minimum_spend_amount"),
+            F.col("act.reward_amount"),
+        )
+    )
+
+
+def build_matched_redemption_rows(
+    candidate_df: DataFrame,
+    pipeline_run_id: str,
+) -> DataFrame:
+    """Create matched redemption rows from transaction-offer candidates.
+
+    Args:
+        candidate_df: Candidate redemption matches.
+        pipeline_run_id: Matching pipeline run identifier.
+
+    Returns:
+        Matched redemption rows with reward and lineage metadata.
+    """
+    match_key_text = F.concat_ws(
+        "||",
+        F.col("transaction_id"),
+        F.col("activation_id"),
+        F.col("offer_id"),
+    )
+
+    return (
+        candidate_df
+        .withColumn(
+            "matched_redemption_id",
+            F.concat(
+                F.lit("mred_"),
+                F.sha2(match_key_text, 256),
+            ),
+        )
+        .withColumn(
+            "calculated_reward_amount",
+            F.col("reward_amount").cast("double"),
+        )
+        .withColumn(
+            "match_rule_version",
+            F.lit(MATCH_RULE_VERSION),
+        )
+        .withColumn(
+            "match_pipeline_run_id",
+            F.lit(pipeline_run_id),
+        )
+        .withColumn(
+            "matched_at",
+            F.current_timestamp(),
+        )
+        .select(
+            "matched_redemption_id",
+            "transaction_id",
+            "activation_id",
+            "offer_id",
+            "campaign_id",
+            "merchant_id",
+            "tokenized_cardmember_id",
+            "transaction_timestamp",
+            "transaction_date",
+            "transaction_amount",
+            "activation_timestamp",
+            "offer_expiry_timestamp",
+            "minimum_spend_amount",
+            "reward_amount",
+            "calculated_reward_amount",
+            "match_rule_version",
+            "match_pipeline_run_id",
+            "matched_at",
+        )
+    )
 
 
 def main(spark_session=None) -> None:
@@ -368,6 +562,92 @@ def main(spark_session=None) -> None:
 
     print("\nMatch-ready activation sample")
     match_ready_activations_df.show(10, truncate=False)
+
+    offer_rules_df = build_offer_rules(
+        offers_df=offers_df,
+    )
+
+    activation_offer_candidates_df = build_activation_offer_candidates(
+        activations_df=match_ready_activations_df,
+        offer_rules_df=offer_rules_df,
+    )
+
+    print("\nOffer rule count")
+    print("=" * 80)
+    print(f"{'offer rules':<40} {offer_rules_df.count():>12,}")
+
+    print("\nActivation-offer candidate count")
+    print("=" * 80)
+    print(
+        f"{'activation-offer candidates':<40} "
+        f"{activation_offer_candidates_df.count():>12,}"
+    )
+
+    print("\nActivation-offer candidate sample")
+    activation_offer_candidates_df.show(10, truncate=False)
+
+    print("\nActivation-offer candidate physical plan")
+    activation_offer_candidates_df.explain(mode="formatted")
+
+    transaction_offer_candidates_df = build_transaction_offer_candidates(
+        transactions_df=match_ready_transactions_df,
+        activation_offer_candidates_df=activation_offer_candidates_df,
+    )
+
+    print("\nTransaction-to-offer candidate count")
+    print("=" * 80)
+
+    transaction_offer_candidate_count = transaction_offer_candidates_df.count()
+
+    print(
+        f"{'transaction-offer candidates':<40} "
+        f"{transaction_offer_candidate_count:>12,}"
+    )
+
+    print("\nTransaction-to-offer candidate sample")
+    transaction_offer_candidates_df.show(20, truncate=False)
+
+    print("\nTransaction-to-offer candidate physical plan")
+    transaction_offer_candidates_df.explain(mode="formatted")
+
+    filtered_transaction_count = match_ready_transactions_df.count()
+    filtered_activation_count = match_ready_activations_df.count()
+
+    print("\nCandidate expansion ratios")
+    print("=" * 80)
+
+    if filtered_transaction_count > 0:
+        print(
+            "candidates / match-ready transactions = "
+            f"{transaction_offer_candidate_count / filtered_transaction_count:.6f}"
+        )
+
+    if filtered_activation_count > 0:
+        print(
+            "candidates / match-ready activations = "
+            f"{transaction_offer_candidate_count / filtered_activation_count:.6f}"
+        )
+
+    matched_redemptions_df = build_matched_redemption_rows(
+        candidate_df=transaction_offer_candidates_df,
+        pipeline_run_id=pipeline_run_id,
+    )
+
+    matched_redemption_count = matched_redemptions_df.count()
+
+    print("\nMatched redemption row count")
+    print("=" * 80)
+    print(
+        f"{'matched redemption rows':<40} "
+        f"{matched_redemption_count:>12,}"
+    )
+
+    print("\nMatched redemption sample")
+    matched_redemptions_df.show(20, truncate=False)
+
+    print("\nMatched redemption schema")
+    matched_redemptions_df.printSchema()
+
 
     if should_stop_spark:
         spark.stop()
