@@ -764,3 +764,139 @@ export MERCHANTLIFT_GOLD_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/gold
 PYTHONPATH=src python spark_jobs/build_redemption_matching.py
 ```
 
+
+## Gold Merchant and Offer Daily Marts
+
+MerchantLift BI includes a Spark/Delta Gold job that builds business-ready merchant and offer daily marts.
+
+Primary job:
+
+```text
+spark_jobs/build_merchant_economics.py
+```
+
+Primary outputs:
+
+```text
+data/lakehouse/gold/gold_merchant_daily/
+data/lakehouse/gold/gold_offer_daily/
+```
+
+The job reads:
+
+```text
+silver.fact_transactions_clean
+silver.fact_matched_offer_redemptions_clean
+silver.dim_merchant_scd
+silver.dim_offer_scd
+silver.dim_campaign_scd
+```
+
+It builds:
+
+```text
+gold_merchant_daily
+gold_offer_daily
+```
+
+### gold_merchant_daily
+
+Grain:
+
+```text
+business_date + merchant_id
+```
+
+Purpose:
+
+```text
+Daily merchant economics and reporting.
+```
+
+Key metrics:
+
+```text
+transaction_count
+gross_spend_amount
+average_transaction_amount
+matched_redemption_count
+redeemed_transaction_count
+redemption_rate
+reward_cost_amount
+average_reward_amount
+merchant_margin_rate
+platform_fee_rate
+platform_fee_amount
+estimated_merchant_margin_amount
+merchant_net_after_reward
+```
+
+### gold_offer_daily
+
+Grain:
+
+```text
+business_date + offer_id + campaign_id + merchant_id
+```
+
+Purpose:
+
+```text
+Daily offer performance and reward-cost reporting.
+```
+
+Key metrics:
+
+```text
+matched_redemption_count
+redeemed_transaction_count
+gross_redeemed_spend_amount
+reward_cost_amount
+average_redeemed_transaction_amount
+average_reward_amount
+reward_to_redeemed_spend_ratio
+```
+
+The job writes both outputs as partitioned Delta tables by:
+
+```text
+business_date
+```
+
+It validates:
+
+```text
+row counts after write
+required output columns
+unique table grain
+non-negative financial metrics
+bounded rate fields
+financial formula correctness
+```
+
+Run locally:
+
+```bash
+PYTHONPATH=src python spark_jobs/build_merchant_economics.py
+```
+
+Run in Databricks:
+
+```bash
+cd /Workspace/Repos/<your-folder>/merchantlift-bi
+
+export MERCHANTLIFT_LAKEHOUSE_DIR=/dbfs/FileStore/merchantlift/data/lakehouse
+export MERCHANTLIFT_BRONZE_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/bronze
+export MERCHANTLIFT_SILVER_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/silver
+export MERCHANTLIFT_GOLD_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/gold
+
+PYTHONPATH=src python spark_jobs/build_merchant_economics.py
+```
+
+Important note:
+
+```text
+merchant_net_after_reward is an economics proxy, not final causal incrementality.
+True incrementality comes later when test group spend is compared against matched control group spend.
+```
+
