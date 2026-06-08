@@ -202,6 +202,272 @@ def write_silver_table(
     print(f"Wrote SCD table: {output_path}")
 
 
+def validate_written_scd_table(
+    spark,
+    table_name: str,
+    expected_row_count: int,
+) -> None:
+    """Validate a written SCD Delta table.
+
+    Args:
+        spark: Active Spark session.
+        table_name: Written SCD table name.
+        expected_row_count: Expected row count.
+
+    Raises:
+        ValueError: If the written row count does not match.
+    """
+    written_df = read_silver_table(
+        spark=spark,
+        table_name=table_name,
+    )
+
+    actual_row_count = written_df.count()
+
+    print("\nWritten SCD table validation")
+    print("=" * 80)
+    print(f"{'table':<40} {table_name}")
+    print(f"{'expected rows':<40} {expected_row_count:>12,}")
+    print(f"{'actual rows':<40} {actual_row_count:>12,}")
+    print("=" * 80)
+
+    if actual_row_count != expected_row_count:
+        raise ValueError(
+            f"SCD row count mismatch for {table_name}: "
+            f"expected {expected_row_count:,}, got {actual_row_count:,}"
+        )
+
+    print(f"SCD write validation passed: {table_name}")
+
+
+def validate_scd_output_columns(
+    scd_df: DataFrame,
+    config: ScdDimensionConfig,
+) -> None:
+    """Validate required SCD output columns.
+
+    Args:
+        scd_df: SCD DataFrame.
+        config: SCD dimension configuration.
+    """
+    required_columns = (
+        "surrogate_scd_id",
+        config.business_key,
+        *config.tracked_columns,
+        "effective_start_date",
+        "effective_end_date",
+        "is_current",
+        "scd_record_hash",
+        "scd_created_at",
+        "scd_updated_at",
+        "scd_pipeline_run_id",
+        "scd_rule_version",
+    )
+
+    require_columns(
+        df=scd_df,
+        table_name=config.output_table_name,
+        required_columns=required_columns,
+    )
+
+
+def write_and_validate_scd_dimension(
+    spark,
+    config: ScdDimensionConfig,
+    scd_df: DataFrame,
+    expected_row_count: int,
+) -> None:
+    """Write and validate one SCD dimension table.
+
+    Args:
+        spark: Active Spark session.
+        config: SCD dimension configuration.
+        scd_df: SCD DataFrame to write.
+        expected_row_count: Expected row count.
+    """
+    validate_scd_output_columns(
+        scd_df=scd_df,
+        config=config,
+    )
+
+    write_silver_table(
+        df=scd_df,
+        table_name=config.output_table_name,
+    )
+
+    validate_written_scd_table(
+        spark=spark,
+        table_name=config.output_table_name,
+        expected_row_count=expected_row_count,
+    )
+
+
+def validate_scd_business_rules(
+    spark,
+    config: ScdDimensionConfig,
+) -> tuple[str, int]:
+    """Validate business rules for one written SCD table.
+
+    Args:
+        spark: Active Spark session.
+        config: SCD dimension configuration.
+
+    Returns:
+        Output table name and validation failure count.
+    """
+    scd_df = read_silver_table(
+        spark=spark,
+        table_name=config.output_table_name,
+    )
+
+    require_columns(
+        df=scd_df,
+        table_name=config.output_table_name,
+        required_columns=(
+            "surrogate_scd_id",
+            config.business_key,
+            "effective_start_date",
+            "effective_end_date",
+            "is_current",
+            "scd_record_hash",
+            "scd_created_at",
+            "scd_updated_at",
+            "scd_pipeline_run_id",
+            "scd_rule_version",
+        ),
+    )
+
+    null_required_count = (
+        scd_df
+        .filter(
+            F.col("surrogate_scd_id").isNull()
+            | F.col(config.business_key).isNull()
+            | F.col("effective_start_date").isNull()
+            | F.col("is_current").isNull()
+            | F.col("scd_record_hash").isNull()
+            | F.col("scd_created_at").isNull()
+            | F.col("scd_updated_at").isNull()
+            | F.col("scd_pipeline_run_id").isNull()
+            | F.col("scd_rule_version").isNull()
+        )
+        .count()
+    )
+
+    invalid_effective_dates_count = (
+        scd_df
+        .filter(
+            F.col("effective_end_date").isNotNull()
+            & (F.col("effective_end_date") < F.col("effective_start_date"))
+        )
+        .count()
+    )
+
+    invalid_current_end_date_count = (
+        scd_df
+        .filter(
+            (F.col("is_current") == True)
+            & F.col("effective_end_date").isNotNull()
+        )
+        .count()
+    )
+
+    current_rows_per_key_df = (
+        scd_df
+        .filter(F.col("is_current") == True)
+        .groupBy(config.business_key)
+        .count()
+    )
+
+    invalid_current_key_count = (
+        current_rows_per_key_df
+        .filter(F.col("count") != 1)
+        .count()
+    )
+
+    duplicate_surrogate_id_count = (
+        scd_df
+        .groupBy("surrogate_scd_id")
+        .count()
+        .filter(F.col("count") > 1)
+        .count()
+    )
+
+    failure_count = (
+        null_required_count
+        + invalid_effective_dates_count
+        + invalid_current_end_date_count
+        + invalid_current_key_count
+        + duplicate_surrogate_id_count
+    )
+
+    print("\nSCD business-rule validation")
+    print("=" * 80)
+    print(f"{'table':<45} {config.output_table_name}")
+    print(f"{'null required rows':<45} {null_required_count:>12,}")
+    print(f"{'invalid effective date rows':<45} {invalid_effective_dates_count:>12,}")
+    print(f"{'current rows with end date':<45} {invalid_current_end_date_count:>12,}")
+    print(f"{'business keys without exactly one current row':<45} {invalid_current_key_count:>12,}")
+    print(f"{'duplicate surrogate_scd_id values':<45} {duplicate_surrogate_id_count:>12,}")
+    print(f"{'total validation failures':<45} {failure_count:>12,}")
+    print("=" * 80)
+
+    return config.output_table_name, failure_count
+
+
+def validate_all_scd_outputs(spark) -> None:
+    """Validate all configured SCD output tables.
+
+    Args:
+        spark: Active Spark session.
+
+    Raises:
+        ValueError: If any SCD table fails validation.
+    """
+    print("\nValidating all SCD outputs")
+    print("=" * 80)
+
+    validation_results: list[tuple[str, int]] = []
+
+    for config in SCD_DIMENSIONS:
+        table_name, failure_count = validate_scd_business_rules(
+            spark=spark,
+            config=config,
+        )
+
+        validation_results.append(
+            (
+                table_name,
+                failure_count,
+            )
+        )
+
+    print("\nSCD validation summary")
+    print("=" * 80)
+    print(f"{'table':<45} {'failures':>12} {'status':>12}")
+    print("-" * 80)
+
+    failed_tables = []
+
+    for table_name, failure_count in validation_results:
+        status = "PASSED" if failure_count == 0 else "FAILED"
+
+        if failure_count > 0:
+            failed_tables.append(table_name)
+
+        print(f"{table_name:<45} {failure_count:>12,} {status:>12}")
+
+    print("=" * 80)
+
+    if failed_tables:
+        raise ValueError(
+            "SCD output validation failed for: "
+            + ", ".join(failed_tables)
+        )
+
+    print("All SCD output validations passed.")
+
+
+
 def add_surrogate_scd_id(
     df: DataFrame,
     business_key: str,
@@ -439,6 +705,8 @@ def main(spark_session=None) -> None:
     scd_results: list[tuple[str, int, int]] = []
     scd_dataframes: dict[str, DataFrame] = {}
 
+    scd_results: list[tuple[ScdDimensionConfig, int, int, DataFrame]] = []
+
     for config in SCD_DIMENSIONS:
         output_table_name, source_count, scd_count, scd_df = build_one_scd_dimension(
             spark=spark,
@@ -448,13 +716,12 @@ def main(spark_session=None) -> None:
 
         scd_results.append(
             (
-                output_table_name,
+                config,
                 source_count,
                 scd_count,
+                scd_df,
             )
         )
-
-    scd_dataframes[output_table_name] = scd_df
 
     print("\nSCD dimension build summary")
     print("=" * 80)
@@ -469,12 +736,12 @@ def main(spark_session=None) -> None:
     total_source_rows = 0
     total_scd_rows = 0
 
-    for output_table_name, source_count, scd_count in scd_results:
+    for config, source_count, scd_count, _ in scd_results:
         total_source_rows += source_count
         total_scd_rows += scd_count
 
         print(
-            f"{output_table_name:<35} "
+            f"{config.output_table_name:<35} "
             f"{source_count:>12,} "
             f"{scd_count:>12,} "
             f"{source_count - scd_count:>12,}"
@@ -488,6 +755,21 @@ def main(spark_session=None) -> None:
         f"{total_source_rows - total_scd_rows:>12,}"
     )
     print("=" * 80)
+
+    print("\nWriting SCD Delta tables")
+    print("=" * 80)
+
+    for config, _, scd_count, scd_df in scd_results:
+        write_and_validate_scd_dimension(
+            spark=spark,
+            config=config,
+            scd_df=scd_df,
+            expected_row_count=scd_count,
+        )
+
+    print("\nAll SCD Delta tables written and validated.")
+
+    validate_all_scd_outputs(spark)
 
     if should_stop_spark:
         spark.stop()
