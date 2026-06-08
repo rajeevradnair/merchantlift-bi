@@ -900,3 +900,143 @@ merchant_net_after_reward is an economics proxy, not final causal incrementality
 True incrementality comes later when test group spend is compared against matched control group spend.
 ```
 
+
+## Offer Incrementality Engine
+
+MerchantLift BI includes a Spark/Delta incrementality job that compares test group spend against control group spend to estimate offer lift.
+
+Primary job:
+
+```text
+spark_jobs/build_incrementality.py
+```
+
+Primary output:
+
+```text
+data/lakehouse/gold/gold_offer_incrementality/
+```
+
+The job reads:
+
+```text
+silver.fact_matched_offer_redemptions_clean
+silver.fact_control_group_transactions_clean
+silver.dim_offer_scd
+silver.dim_merchant_scd
+```
+
+It builds:
+
+```text
+gold_offer_incrementality
+```
+
+### Purpose
+
+The incrementality engine estimates whether a merchant-funded offer created incremental spend beyond what similar control customers would have spent.
+
+It answers:
+
+```text
+Did the test group spend more than the control group?
+How much lift per cardmember was observed?
+How much incremental revenue was estimated?
+What is the estimated value after reward cost and platform fee?
+```
+
+### Grain
+
+One row represents:
+
+```text
+business_date + offer_id + campaign_id + merchant_id
+```
+
+### Core Metrics
+
+```text
+test_cardmember_count
+test_transaction_count
+test_redemption_count
+total_test_spend_amount
+total_test_reward_amount
+average_test_spend_per_cardmember
+control_cardmember_count
+control_transaction_count
+total_control_spend_amount
+average_control_spend_per_cardmember
+lift_per_cardmember
+lift_direction
+lift_percentage
+incremental_revenue_amount
+incremental_revenue_direction
+estimated_incremental_margin_amount
+estimated_incremental_platform_fee_amount
+estimated_incremental_value_after_reward
+```
+
+### Core Formulas
+
+```text
+lift_per_cardmember =
+    average_test_spend_per_cardmember
+    - average_control_spend_per_cardmember
+```
+
+```text
+incremental_revenue_amount =
+    lift_per_cardmember * test_cardmember_count
+```
+
+```text
+estimated_incremental_value_after_reward =
+    estimated_incremental_margin_amount
+    - total_test_reward_amount
+    - estimated_incremental_platform_fee_amount
+```
+
+The job writes a partitioned Delta table by:
+
+```text
+business_date
+```
+
+It validates:
+
+```text
+required output columns
+unique table grain
+valid test/control counts
+non-negative spend and reward fields
+valid direction labels
+formula correctness
+read-back row counts
+```
+
+Run locally:
+
+```bash
+PYTHONPATH=src python spark_jobs/build_incrementality.py
+```
+
+Run in Databricks:
+
+```bash
+cd /Workspace/Repos/<your-folder>/merchantlift-bi
+
+export MERCHANTLIFT_LAKEHOUSE_DIR=/dbfs/FileStore/merchantlift/data/lakehouse
+export MERCHANTLIFT_BRONZE_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/bronze
+export MERCHANTLIFT_SILVER_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/silver
+export MERCHANTLIFT_GOLD_DIR=/dbfs/FileStore/merchantlift/data/lakehouse/gold
+
+PYTHONPATH=src python spark_jobs/build_incrementality.py
+```
+
+Important note:
+
+```text
+This first version uses matched redemptions as the test group source.
+That is practical for the initial implementation, but later versions should improve the design using exposed, activated, or assigned test cohorts plus stronger matched-control diagnostics.
+```
+
