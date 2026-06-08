@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+from pyspark.sql import Window
+
 
 from merchantlift.paths import SILVER_DIR
 from merchantlift.spark import create_spark_session_local
@@ -464,6 +466,122 @@ def build_matched_redemption_rows(
     )
 
 
+def deduplicate_matches_per_transaction(
+    matched_redemptions_df: DataFrame,
+) -> DataFrame:
+    """Choose one best matched redemption per transaction.
+
+    Args:
+        matched_redemptions_df: Matched redemption candidate rows.
+
+    Returns:
+        Deduplicated matched redemption rows.
+    """
+    required_columns = (
+        "transaction_id",
+        "calculated_reward_amount",
+        "activation_timestamp",
+        "offer_id",
+    )
+
+    require_columns(
+        df=matched_redemptions_df,
+        table_name=MATCHED_REDEMPTION_TABLE,
+        required_columns=required_columns,
+    )
+
+    match_window = Window.partitionBy("transaction_id").orderBy(
+        F.desc("calculated_reward_amount"),
+        F.asc("activation_timestamp"),
+        F.asc("offer_id"),
+    )
+
+    return (
+        matched_redemptions_df
+        .withColumn("match_rank", F.row_number().over(match_window))
+        .filter(F.col("match_rank") == 1)
+        .withColumn(
+            "match_deduplication_reason",
+            F.lit(
+                "selected_highest_reward_then_earliest_activation_then_offer_id"
+            ),
+        )
+        .drop("match_rank")
+    )
+
+
+def validate_written_matched_redemptions(
+    spark,
+    expected_row_count: int,
+) -> None:
+    """Validate that the matched redemption table was written correctly.
+
+    Args:
+        spark: Active Spark session.
+        expected_row_count: Expected number of matched redemption rows.
+
+    Raises:
+        ValueError: If the written table row count does not match.
+    """
+    written_df = read_silver_table(
+        spark=spark,
+        table_name=MATCHED_REDEMPTION_TABLE,
+    )
+
+    actual_row_count = written_df.count()
+
+    print("\nWritten matched redemption validation")
+    print("=" * 80)
+    print(f"{'expected rows':<40} {expected_row_count:>12,}")
+    print(f"{'actual rows':<40} {actual_row_count:>12,}")
+    print("=" * 80)
+
+    if actual_row_count != expected_row_count:
+        raise ValueError(
+            f"Matched redemption row count mismatch: "
+            f"expected {expected_row_count:,}, got {actual_row_count:,}"
+        )
+
+    print("Matched redemption write validation passed.")
+
+
+def validate_matched_redemption_columns(
+    matched_df: DataFrame,
+) -> None:
+    """Validate required matched redemption output columns.
+
+    Args:
+        matched_df: Matched redemption DataFrame.
+    """
+    required_columns = (
+        "matched_redemption_id",
+        "transaction_id",
+        "activation_id",
+        "offer_id",
+        "campaign_id",
+        "merchant_id",
+        "tokenized_cardmember_id",
+        "transaction_timestamp",
+        "transaction_date",
+        "transaction_amount",
+        "activation_timestamp",
+        "offer_expiry_timestamp",
+        "minimum_spend_amount",
+        "reward_amount",
+        "calculated_reward_amount",
+        "match_rule_version",
+        "match_pipeline_run_id",
+        "matched_at",
+        "match_deduplication_reason",
+    )
+
+    require_columns(
+        df=matched_df,
+        table_name=MATCHED_REDEMPTION_TABLE,
+        required_columns=required_columns,
+    )
+
+
 def main(spark_session=None) -> None:
     """Run redemption matching job."""
 
@@ -648,6 +766,48 @@ def main(spark_session=None) -> None:
     print("\nMatched redemption schema")
     matched_redemptions_df.printSchema()
 
+
+    deduplicated_redemptions_df = deduplicate_matches_per_transaction(
+        matched_redemptions_df=matched_redemptions_df,
+    )
+
+    deduplicated_redemption_count = deduplicated_redemptions_df.count()
+
+    print("\nDeduplicated matched redemption row count")
+    print("=" * 80)
+    print(
+        f"{'candidate matched rows':<40} "
+        f"{matched_redemption_count:>12,}"
+    )
+    print(
+        f"{'deduplicated matched rows':<40} "
+        f"{deduplicated_redemption_count:>12,}"
+    )
+    print(
+        f"{'duplicate candidate rows removed':<40} "
+        f"{matched_redemption_count - deduplicated_redemption_count:>12,}"
+    )
+
+    print("\nDeduplicated matched redemption sample")
+    deduplicated_redemptions_df.show(20, truncate=False)
+
+    print("\nDeduplicated matched redemption schema")
+    deduplicated_redemptions_df.printSchema()
+
+    validate_matched_redemption_columns(
+        matched_df=deduplicated_redemptions_df,
+    )
+
+    write_silver_table(
+        df=deduplicated_redemptions_df,
+        table_name=MATCHED_REDEMPTION_TABLE,
+        partition_column="transaction_date",
+    )
+
+    validate_written_matched_redemptions(
+        spark=spark,
+        expected_row_count=deduplicated_redemption_count,
+    )
 
     if should_stop_spark:
         spark.stop()
