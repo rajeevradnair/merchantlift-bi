@@ -17,6 +17,12 @@ TRANSACTIONS_TABLE = "fact_transactions_clean"
 ACTIVATIONS_TABLE = "fact_offer_activations_clean"
 OFFERS_TABLE = "dim_offer_clean"
 
+ELIGIBLE_TRANSACTION_STATUSES = (
+    "approved",
+    "posted",
+    "settled",
+)
+
 def build_pipeline_run_id() -> str:
     """Create a unique matching pipeline run identifier.
 
@@ -92,6 +98,147 @@ def inspect_table(
     df.show(sample_size, truncate=False)
 
     return row_count
+
+
+def require_columns(
+    df: DataFrame,
+    table_name: str,
+    required_columns: tuple[str, ...],
+) -> None:
+    """Validate that a DataFrame contains required columns.
+
+    Args:
+        df: DataFrame to validate.
+        table_name: Human-readable table name.
+        required_columns: Required column names.
+
+    Raises:
+        ValueError: If required columns are missing.
+    """
+    missing_columns = sorted(set(required_columns) - set(df.columns))
+
+    if missing_columns:
+        raise ValueError(
+            f"{table_name} is missing required columns: "
+            f"{', '.join(missing_columns)}"
+        )
+
+
+def build_match_ready_transactions(
+    transactions_df: DataFrame,
+) -> DataFrame:
+    """Prepare Silver transactions for redemption matching.
+
+    Args:
+        transactions_df: Silver transactions DataFrame.
+
+    Returns:
+        Filtered transaction DataFrame with matching columns.
+    """
+    required_columns = (
+        "transaction_id",
+        "tokenized_cardmember_id",
+        "merchant_id",
+        "transaction_timestamp",
+        "transaction_date",
+        "transaction_amount",
+    )
+
+    require_columns(
+        df=transactions_df,
+        table_name=TRANSACTIONS_TABLE,
+        required_columns=required_columns,
+    )
+
+    filtered_df = (
+        transactions_df
+        .filter(F.col("transaction_id").isNotNull())
+        .filter(F.col("tokenized_cardmember_id").isNotNull())
+        .filter(F.col("merchant_id").isNotNull())
+        .filter(F.col("transaction_timestamp").isNotNull())
+        .filter(F.col("transaction_date").isNotNull())
+        .filter(F.col("transaction_amount").isNotNull())
+        .filter(F.col("transaction_amount") >= 0)
+    )
+
+    if "transaction_status" in filtered_df.columns:
+        filtered_df = filtered_df.filter(
+            F.lower(F.col("transaction_status")).isin(
+                *ELIGIBLE_TRANSACTION_STATUSES
+            )
+        )
+
+    selected_columns = [
+        "transaction_id",
+        "tokenized_cardmember_id",
+        "merchant_id",
+        "transaction_timestamp",
+        "transaction_date",
+        "transaction_amount",
+    ]
+
+    if "transaction_status" in filtered_df.columns:
+        selected_columns.append("transaction_status")
+
+    return filtered_df.select(*selected_columns)
+
+
+def build_match_ready_activations(
+    activations_df: DataFrame,
+) -> DataFrame:
+    """Prepare Silver activations for redemption matching.
+
+    Args:
+        activations_df: Silver activations DataFrame.
+
+    Returns:
+        Filtered activation DataFrame with matching columns.
+    """
+    required_columns = (
+        "activation_id",
+        "tokenized_cardmember_id",
+        "offer_id",
+        "activation_timestamp",
+        "offer_expiry_timestamp",
+    )
+
+    require_columns(
+        df=activations_df,
+        table_name=ACTIVATIONS_TABLE,
+        required_columns=required_columns,
+    )
+
+    filtered_df = (
+        activations_df
+        .filter(F.col("activation_id").isNotNull())
+        .filter(F.col("tokenized_cardmember_id").isNotNull())
+        .filter(F.col("offer_id").isNotNull())
+        .filter(F.col("activation_timestamp").isNotNull())
+        .filter(F.col("offer_expiry_timestamp").isNotNull())
+        .filter(F.col("offer_expiry_timestamp") >= F.col("activation_timestamp"))
+    )
+
+    if "activation_status" in filtered_df.columns:
+        filtered_df = filtered_df.filter(
+            F.lower(F.col("activation_status")).isin(
+                "active",
+                "activated",
+                "eligible",
+            )
+        )
+
+    selected_columns = [
+        "activation_id",
+        "tokenized_cardmember_id",
+        "offer_id",
+        "activation_timestamp",
+        "offer_expiry_timestamp",
+    ]
+
+    if "activation_status" in filtered_df.columns:
+        selected_columns.append("activation_status")
+
+    return filtered_df.select(*selected_columns)
 
 
 def write_silver_table(
@@ -172,6 +319,55 @@ def main(spark_session=None) -> None:
         table_name=OFFERS_TABLE,
         df=offers_df,
     )
+
+    match_ready_transactions_df = build_match_ready_transactions(
+        transactions_df=transactions_df,
+    )
+
+    match_ready_activations_df = build_match_ready_activations(
+        activations_df=activations_df,
+    )
+
+    print("\nMatch-ready input counts")
+    print("=" * 80)
+
+    original_transaction_count = transactions_df.count()
+    filtered_transaction_count = match_ready_transactions_df.count()
+
+    original_activation_count = activations_df.count()
+    filtered_activation_count = match_ready_activations_df.count()
+
+    print(
+        f"{'transactions original':<40} "
+        f"{original_transaction_count:>12,}"
+    )
+    print(
+        f"{'transactions match-ready':<40} "
+        f"{filtered_transaction_count:>12,}"
+    )
+    print(
+        f"{'transactions removed':<40} "
+        f"{original_transaction_count - filtered_transaction_count:>12,}"
+    )
+
+    print(
+        f"{'activations original':<40} "
+        f"{original_activation_count:>12,}"
+    )
+    print(
+        f"{'activations match-ready':<40} "
+        f"{filtered_activation_count:>12,}"
+    )
+    print(
+        f"{'activations removed':<40} "
+        f"{original_activation_count - filtered_activation_count:>12,}"
+    )
+
+    print("\nMatch-ready transaction sample")
+    match_ready_transactions_df.show(10, truncate=False)
+
+    print("\nMatch-ready activation sample")
+    match_ready_activations_df.show(10, truncate=False)
 
     if should_stop_spark:
         spark.stop()
