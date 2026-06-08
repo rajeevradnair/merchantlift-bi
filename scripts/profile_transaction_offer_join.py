@@ -135,7 +135,6 @@ def build_activation_offer_candidates(
             F.col("act.activation_timestamp"),
             F.col("act.offer_expiry_timestamp"),
             F.col("offer.minimum_spend_amount"),
-            F.col("offer.reward_rate"),
         )
     )
 
@@ -171,7 +170,6 @@ def build_safe_candidate_join(
         "activation_timestamp",
         "offer_expiry_timestamp",
         "minimum_spend_amount",
-        "reward_rate",
     )
 
     return (
@@ -198,7 +196,6 @@ def build_safe_candidate_join(
             F.col("act.offer_id"),
             F.col("act.campaign_id"),
             F.col("act.minimum_spend_amount"),
-            F.col("act.reward_rate"),
         )
     )
 
